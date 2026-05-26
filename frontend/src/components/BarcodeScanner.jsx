@@ -154,54 +154,63 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
 
   return (
     <div style={styles.scannerWrapper}>
-      {!isActive ? (
-        <div style={styles.startPanel} className="glass-panel">
-          <Camera size={44} style={styles.icon} />
-          <h3 style={styles.title}>Camera Ingestion</h3>
-          <p style={styles.desc}>
-            Position the book's linear barcode (ISBN-10 or ISBN-13) inside the target frame using your rear environment camera.
-          </p>
-          <button className="btn btn-primary" onClick={startScanner}>
-            Start Ingestion Scanner
+      <div 
+        style={{ 
+          ...styles.startPanel, 
+          display: !isActive ? 'flex' : 'none' 
+        }} 
+        className="glass-panel"
+      >
+        <Camera size={44} style={styles.icon} />
+        <h3 style={styles.title}>Camera Ingestion</h3>
+        <p style={styles.desc}>
+          Position the book's linear barcode (ISBN-10 or ISBN-13) inside the target frame using your rear environment camera.
+        </p>
+        <button className="btn btn-primary" onClick={startScanner}>
+          Start Ingestion Scanner
+        </button>
+        
+        {errorMessage && (
+          <div style={styles.errorBanner}>
+            <AlertCircle size={18} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+      </div>
+
+      <div 
+        style={{ 
+          ...styles.activePanel, 
+          display: isActive ? 'flex' : 'none' 
+        }}
+      >
+        {/* Controls Bar */}
+        <div style={styles.controlsRow}>
+          <button
+            style={styles.toggleBtn}
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? 'Mute Sounds' : 'Unmute Sounds'}
+          >
+            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            <span>{soundEnabled ? 'Sound On' : 'Muted'}</span>
           </button>
           
-          {errorMessage && (
-            <div style={styles.errorBanner}>
-              <AlertCircle size={18} />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+          <button className="btn btn-danger" onClick={stopScanner} style={styles.closeBtn}>
+            Close Scanner
+          </button>
         </div>
-      ) : (
-        <div style={styles.activePanel}>
-          {/* Controls Bar */}
-          <div style={styles.controlsRow}>
-            <button
-              style={styles.toggleBtn}
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              title={soundEnabled ? 'Mute Sounds' : 'Unmute Sounds'}
-            >
-              {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-              <span>{soundEnabled ? 'Sound On' : 'Muted'}</span>
-            </button>
-            
-            <button className="btn btn-danger" onClick={stopScanner} style={styles.closeBtn}>
-              Close Scanner
-            </button>
-          </div>
 
-          {/* Viewfinder frame */}
-          <div style={styles.cameraViewport} className="glass-panel">
-            <div id={scannerContainerId} style={styles.cameraPreview}></div>
-            
-            {/* Custom high-contrast scanning guide lines overlay */}
-            <div style={styles.overlayFrame} className={isPulse ? 'scan-pulse' : ''}>
-              <div style={styles.scanningLine}></div>
-              <div style={styles.guideText}>Align Barcode Here</div>
-            </div>
+        {/* Viewfinder frame */}
+        <div style={styles.cameraViewport} className="glass-panel">
+          <div id={scannerContainerId} style={styles.cameraPreview}></div>
+          
+          {/* Custom high-contrast scanning guide lines overlay */}
+          <div style={styles.overlayFrame} className={isPulse ? 'scan-pulse' : ''}>
+            <div style={styles.scanningLine}></div>
+            <div style={styles.guideText}>Align Barcode Here</div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
