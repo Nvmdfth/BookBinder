@@ -15,9 +15,12 @@ async function verifyBookshelfAccess(req, res, next) {
   }
 
   try {
-    // 1. Fetch bookshelf details
+    // 1. Fetch bookshelf details and check if the owner is disabled (Req 38 / 4.3)
     const shelfRes = await query(
-      'SELECT id, user_id, name FROM bookshelves WHERE id = $1',
+      `SELECT b.id, b.user_id, b.name, u.is_disabled AS owner_disabled 
+       FROM bookshelves b
+       JOIN users u ON b.user_id = u.id
+       WHERE b.id = $1`,
       [bookshelfId]
     );
 
@@ -27,6 +30,11 @@ async function verifyBookshelfAccess(req, res, next) {
 
     const shelf = shelfRes.rows[0];
     const userId = req.user.id;
+
+    // Block collaborators/viewers from accessing shared bookshelves of disabled owners
+    if (shelf.owner_disabled && shelf.user_id !== userId) {
+      return res.status(403).json({ error: 'Access denied. The owner of this bookshelf has had their account disabled.' });
+    }
 
     // 2. Access Check: Owner
     if (shelf.user_id === userId) {

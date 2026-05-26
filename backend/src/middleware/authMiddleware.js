@@ -18,7 +18,7 @@ async function authenticateToken(req, res, next) {
     
     // Query database to ensure user exists and verify if session has been revoked (e.g. via password change)
     const userRes = await query(
-      'SELECT id, email, role, password_hash FROM users WHERE id = $1',
+      'SELECT id, email, role, password_hash, is_disabled FROM users WHERE id = $1',
       [decoded.userId]
     );
 
@@ -28,6 +28,13 @@ async function authenticateToken(req, res, next) {
     }
 
     const dbUser = userRes.rows[0];
+
+    // Disabling guard: Check if account is disabled (Req 38)
+    if (dbUser.is_disabled) {
+      console.log(`🔐 Blocked API access for disabled user ID ${dbUser.id}.`);
+      res.clearCookie('token');
+      return res.status(403).json({ error: 'Your account has been disabled by a system administrator. Please contact support.' });
+    }
     
     // Revocation check: Extract last 10 characters of current password hash
     const currentSig = dbUser.password_hash.slice(-10);

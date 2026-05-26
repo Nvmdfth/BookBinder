@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthProvider';
 import { 
   ShieldAlert, Settings, ToggleLeft, ToggleRight, Trash2, Users, 
-  BookOpen, AlertCircle, CheckCircle, Database, Eye, RefreshCw
+  BookOpen, AlertCircle, CheckCircle, Database, RefreshCw, Key, 
+  X, Copy, UserCheck, UserMinus, ShieldCheck, Library
 } from 'lucide-react';
 
 export default function AdminConsole() {
-  const { isAdmin } = useAuth();
+  const { user: currentUser, isAdmin } = useAuth();
   
   // Settings values
   const [settings, setSettings] = useState({
@@ -23,6 +24,13 @@ export default function AdminConsole() {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
+  // User Management Modals State
+  const [resettingUser, setResettingUser] = useState(null); // User currently selected for password reset
+  const [resetPasswordVal, setResetPasswordVal] = useState('');
+  const [copiedSuccess, setCopiedSuccess] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(null); // User currently selected for deletion
+  const [deleteEmailConfirm, setDeleteEmailConfirm] = useState('');
+
   const fetchAdminData = async () => {
     try {
       // 1. Fetch settings
@@ -38,7 +46,7 @@ export default function AdminConsole() {
         setOrphanData(orphansData);
       }
 
-      // 3. Fetch accounts list
+      // 3. Fetch accounts list (returns bookshelf and physical book counts!) (Req 38)
       const usersRes = await fetch('/api/settings/users');
       if (usersRes.ok) {
         const usersData = await usersRes.json();
@@ -60,7 +68,6 @@ export default function AdminConsole() {
 
   const handleToggleSetting = async (key, currentValue) => {
     const newValue = currentValue === 'true' ? 'false' : 'true';
-    const updatedSettings = { ...settings, [key]: newValue };
     
     try {
       const res = await fetch('/api/settings', {
@@ -75,6 +82,121 @@ export default function AdminConsole() {
       setSettings(data.settings);
       setSuccessMsg(`System switch "${key}" updated successfully.`);
       setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Toggle user active/disabled status (Req 38 / 4.3 disabled)
+  const handleToggleUserStatus = async (targetUser) => {
+    if (targetUser.id === currentUser.id) return; // Safeguard
+
+    const newDisabledState = !targetUser.is_disabled;
+    try {
+      const res = await fetch(`/api/settings/users/${targetUser.id}/disable`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_disabled: newDisabledState }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update user status.');
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === targetUser.id ? { ...u, is_disabled: newDisabledState } : u))
+      );
+      setSuccessMsg(`Status updated successfully: "${targetUser.email}" is now ${newDisabledState ? 'disabled' : 'active'}.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Toggle user role between user and admin (Req 38 promotion)
+  const handleToggleUserRole = async (targetUser) => {
+    if (targetUser.id === currentUser.id) return; // Safeguard
+
+    const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
+    const confirmMsg = newRole === 'admin' 
+      ? `Promote "${targetUser.email}" to Administrator?` 
+      : `Demote "${targetUser.email}" to standard user?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch(`/api/settings/users/${targetUser.id}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update user role.');
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === targetUser.id ? { ...u, role: newRole } : u))
+      );
+      setSuccessMsg(`Role updated successfully: "${targetUser.email}" is now an ${newRole}.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Generate secure random password helper (Req 38)
+  const generateRandomPassword = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let pass = 'BB-';
+    for (let i = 0; i < 8; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setResetPasswordVal(pass);
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!resettingUser || !resetPasswordVal.trim()) return;
+
+    try {
+      const res = await fetch(`/api/settings/users/${resettingUser.id}/reset-password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: resetPasswordVal }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Password reset failed.');
+
+      setSuccessMsg(`Password reset successfully for "${resettingUser.email}". Active sessions revoked.`);
+      setTimeout(() => setSuccessMsg(null), 4000);
+      
+      // Auto copy credentials popup
+      navigator.clipboard.writeText(resetPasswordVal).catch(() => {});
+      setCopiedSuccess(true);
+      setTimeout(() => setCopiedSuccess(false), 2000);
+
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteUser = async (e) => {
+    e.preventDefault();
+    if (!deletingUser || deleteEmailConfirm.trim().toLowerCase() !== deletingUser.email) return;
+
+    try {
+      const res = await fetch(`/api/settings/users/${deletingUser.id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'User deletion failed.');
+
+      setUsers((prev) => prev.filter((u) => u.id !== deletingUser.id));
+      setDeletingUser(null);
+      setDeleteEmailConfirm('');
+      setSuccessMsg(`🗑️ Permanent Cascade: Purged user account and all physical library assets.`);
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
       alert(err.message);
     }
@@ -102,7 +224,6 @@ export default function AdminConsole() {
     }
   };
 
-  // Helper handling image failures
   const handleImageError = (e) => {
     e.target.style.display = 'none';
     e.target.nextSibling.style.display = 'flex';
@@ -128,7 +249,7 @@ export default function AdminConsole() {
     <div style={styles.consoleContainer}>
       <header style={styles.header}>
         <h1 style={styles.title}>Administrative Console</h1>
-        <p style={styles.subtitle}>Enforce system settings switches, prune lookup caches, and audit user logs.</p>
+        <p style={styles.subtitle}>Enforce system switches, manage accounts, audit physical metadata, and clean cache catalogs.</p>
       </header>
 
       {successMsg && (
@@ -210,7 +331,7 @@ export default function AdminConsole() {
           </div>
         </div>
 
-        {/* Global Catalog Orphan Index Pruner (Req 2.39 / 4.2.1 Clean) */}
+        {/* Global Catalog Orphan Index Pruner */}
         <div style={styles.card} className="glass-panel">
           <h2 style={styles.cardTitle}>
             <Database size={20} style={{ color: 'var(--success-color)' }} />
@@ -228,7 +349,6 @@ export default function AdminConsole() {
 
             {orphanData.count > 0 && (
               <>
-                {/* Secure Preview count/list list (Finalized in /grill-me) */}
                 <div style={styles.previewContainer}>
                   <h4 style={styles.previewTitle}>Orphan Previews</h4>
                   <div style={styles.previewList}>
@@ -270,54 +390,257 @@ export default function AdminConsole() {
           </div>
         </div>
 
-        {/* User Account audits console */}
+        {/* 👥 User Account audits & management console (v1.1) */}
         <div style={{ ...styles.card, flex: '1 1 100%' }} className="glass-panel">
           <h2 style={styles.cardTitle}>
             <Users size={20} style={{ color: 'var(--accent-color)' }} />
-            <span>Accounts User Audits Logs</span>
+            <span>Accounts User Audits & Controls</span>
           </h2>
           
           <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>User ID</th>
                   <th style={styles.th}>Email Address</th>
                   <th style={styles.th}>System Role</th>
-                  <th style={styles.th}>Registered On</th>
+                  <th style={styles.th}>Physical Inventory</th>
+                  <th style={styles.th}>Account Status</th>
+                  <th style={styles.th} style={{ textAlign: 'right' }}>Administration Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} style={styles.tr}>
-                    <td style={styles.td}>#{u.id}</td>
-                    <td style={styles.td}>
-                      <div style={styles.tableUserEmail}>
-                        {u.avatar_url ? (
-                          <img src={u.avatar_url} alt="" style={styles.tableAvatarImg} />
+                {users.map((u) => {
+                  const isSelf = u.id === currentUser.id;
+                  return (
+                    <tr key={u.id} style={styles.tr}>
+                      {/* Email and avatar */}
+                      <td style={styles.td}>
+                        <div style={styles.tableUserEmail}>
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt="" style={styles.tableAvatarImg} />
+                          ) : (
+                            <div style={styles.tableAvatarFallback}>{u.email.slice(0, 2).toUpperCase()}</div>
+                          )}
+                          <div style={styles.userTableEmailBlock}>
+                            <span style={styles.tableEmailText}>{u.email}</span>
+                            {isSelf && <span style={styles.selfLabel}>Current User</span>}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Role & promoting triggers */}
+                      <td style={styles.td}>
+                        <div style={styles.roleBlock}>
+                          <span style={{
+                            ...styles.roleBadge,
+                            backgroundColor: u.role === 'admin' ? 'var(--accent-light)' : 'var(--bg-primary)',
+                            color: u.role === 'admin' ? 'var(--accent-color)' : 'var(--text-secondary)',
+                            border: '1px solid var(--border-glass)'
+                          }}>
+                            {u.role}
+                          </span>
+                          {!isSelf && (
+                            <button 
+                              style={styles.inlineActionBtn}
+                              onClick={() => handleToggleUserRole(u)}
+                              title={u.role === 'admin' ? 'Demote to standard user' : 'Promote to administrator'}
+                            >
+                              <ShieldCheck size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 📍 Physical inventory statistics (Req 38 / 4.2.1 Metadata Summary) */}
+                      <td style={styles.td}>
+                        <div style={styles.statsCol}>
+                          <span style={styles.statsPill}>
+                            <Library size={12} />
+                            <span>{u.bookshelf_count} shelves</span>
+                          </span>
+                          <span style={{ ...styles.statsPill, backgroundColor: 'rgba(16, 185, 129, 0.08)', color: 'var(--success-color)' }}>
+                            <BookOpen size={12} />
+                            <span>{u.book_count} books</span>
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Status switches (Active vs. Disabled) */}
+                      <td style={styles.td}>
+                        {u.is_disabled ? (
+                          <span style={{ ...styles.statusBadge, ...styles.badgeDisabled }}>Disabled</span>
                         ) : (
-                          <div style={styles.tableAvatarFallback}>{u.email.slice(0, 2).toUpperCase()}</div>
+                          <span style={{ ...styles.statusBadge, ...styles.badgeActive }}>Active</span>
                         )}
-                        <span>{u.email}</span>
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={{
-                        ...styles.roleBadge,
-                        backgroundColor: u.role === 'admin' ? 'rgba(99, 102, 241, 0.1)' : 'var(--bg-primary)',
-                        color: u.role === 'admin' ? 'var(--accent-color)' : 'var(--text-secondary)'
-                      }}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td style={styles.td}>{new Date(u.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
+                      </td>
+
+                      {/* interactive user management console */}
+                      <td style={styles.td} style={{ textAlign: 'right' }}>
+                        <div style={styles.actionsCell}>
+                          {isSelf ? (
+                            <span style={styles.shieldedLabel}>Shielded</span>
+                          ) : (
+                            <>
+                              {/* Enable/Disable Toggle */}
+                              <button
+                                style={{
+                                  ...styles.actionIconBtn,
+                                  color: u.is_disabled ? 'var(--success-color)' : 'var(--warning-color)'
+                                }}
+                                onClick={() => handleToggleUserStatus(u)}
+                                title={u.is_disabled ? 'Enable Account' : 'Disable Account'}
+                              >
+                                {u.is_disabled ? <UserCheck size={18} /> : <UserMinus size={18} />}
+                              </button>
+
+                              {/* Reset Password */}
+                              <button
+                                style={{ ...styles.actionIconBtn, color: 'var(--accent-color)' }}
+                                onClick={() => {
+                                  setResettingUser(u);
+                                  setResetPasswordVal('');
+                                }}
+                                title="Reset User Password"
+                              >
+                                <Key size={18} />
+                              </button>
+
+                              {/* Cascade Delete User */}
+                              <button
+                                style={{ ...styles.actionIconBtn, color: 'var(--danger-color)' }}
+                                onClick={() => {
+                                  setDeletingUser(u);
+                                  setDeleteEmailConfirm('');
+                                }}
+                                title="Permanently Delete User"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      {/* 🗝️ Password Reset Modal Overlay */}
+      {resettingUser && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard} className="glass-panel">
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Password Reset Console</h3>
+              <button style={styles.closeModalBtn} onClick={() => setResettingUser(null)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPassword} style={styles.modalForm}>
+              <div style={styles.warningSummaryRow}>
+                <Key size={18} style={{ color: 'var(--accent-color)' }} />
+                <span>Resetting password for: <strong>{resettingUser.email}</strong></span>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">New Password</label>
+                <div style={styles.pwdInputRow}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={resetPasswordVal}
+                    onChange={(e) => setResetPasswordVal(e.target.value)}
+                    placeholder="Enter or generate temporary password"
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={generateRandomPassword}
+                    style={styles.genBtn}
+                  >
+                    Generate Random
+                  </button>
+                </div>
+              </div>
+
+              {copiedSuccess && (
+                <div style={styles.copiedBanner}>
+                  <Copy size={14} />
+                  <span>New password copied to clipboard!</span>
+                </div>
+              )}
+
+              <div style={styles.modalActions}>
+                <button type="button" className="btn btn-secondary" onClick={() => setResettingUser(null)}>
+                  Close
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Confirm Password Reset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🗑️ Cascade Deletion Safety Warning Modal (Req 38 cascade) */}
+      {deletingUser && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard} className="glass-panel error-shake">
+            <div style={styles.modalHeader}>
+              <h3 style={{ ...styles.modalTitle, color: 'var(--danger-color)' }}>⚠️ Permanent Cascade Deletion</h3>
+              <button style={styles.closeModalBtn} onClick={() => setDeletingUser(null)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleDeleteUser} style={styles.modalForm}>
+              <div style={styles.dangerSummaryRow}>
+                <AlertCircle size={24} />
+                <div>
+                  <h4 style={styles.dangerSummaryTitle}>Warning: Irreversible Purge</h4>
+                  <p style={styles.dangerSummaryDesc}>
+                    This will permanently delete the user account and **completely erase all bookshelves, shared libraries, and physical book catalog mappings** owned by this account.
+                  </p>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  To confirm, please type the recipient email address: <strong>{deletingUser.email}</strong>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={deleteEmailConfirm}
+                  onChange={(e) => setDeleteEmailConfirm(e.target.value)}
+                  placeholder="Type user's exact email address"
+                  required
+                />
+              </div>
+
+              <div style={styles.modalActions}>
+                <button type="button" className="btn btn-secondary" onClick={() => setDeletingUser(null)}>
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-danger" 
+                  disabled={deleteEmailConfirm.trim().toLowerCase() !== deletingUser.email}
+                >
+                  Permanently Purge Account
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -570,6 +893,7 @@ const styles = {
     padding: '14px 16px',
     fontSize: '0.9rem',
     color: 'var(--text-primary)',
+    verticalAlign: 'middle',
   },
   tableUserEmail: {
     display: 'flex',
@@ -594,13 +918,103 @@ const styles = {
     fontSize: '0.7rem',
     fontWeight: '750',
   },
+  userTableEmailBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  tableEmailText: {
+    fontWeight: '600',
+  },
+  selfLabel: {
+    fontSize: '0.7rem',
+    color: 'var(--accent-color)',
+    fontWeight: '700',
+    letterSpacing: '0.02em',
+  },
+  shieldedLabel: {
+    fontSize: '0.75rem',
+    fontWeight: '700',
+    color: 'var(--text-muted)',
+    backgroundColor: 'var(--bg-primary)',
+    padding: '4px 12px',
+    borderRadius: '4px',
+    border: '1px solid var(--border-glass)',
+  },
+  roleBlock: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
   roleBadge: {
     fontSize: '0.7rem',
-    fontWeight: '800',
+    fontWeight: '850',
     textTransform: 'uppercase',
     padding: '2px 8px',
     borderRadius: '4px',
     letterSpacing: '0.05em',
+  },
+  inlineActionBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--text-muted)',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    borderRadius: '4px',
+    transition: 'var(--transition-smooth)',
+  },
+  statsCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  statsPill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.75rem',
+    fontWeight: '700',
+    color: 'var(--accent-color)',
+    backgroundColor: 'var(--accent-light)',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    width: 'fit-content',
+  },
+  statusBadge: {
+    fontSize: '0.7rem',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    letterSpacing: '0.05em',
+    width: 'fit-content',
+    display: 'inline-block',
+  },
+  badgeActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    color: 'var(--success-color)',
+  },
+  badgeDisabled: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    color: 'var(--danger-color)',
+  },
+  actionsCell: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+  },
+  actionIconBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '6px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-glass)',
+    transition: 'var(--transition-smooth)',
   },
   errorContainer: {
     display: 'flex',
@@ -611,5 +1025,102 @@ const styles = {
     gap: '16px',
     maxWidth: '500px',
     margin: '40px auto',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 200,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '20px',
+    backdropFilter: 'blur(4px)',
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: '500px',
+    padding: '30px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    boxShadow: 'var(--shadow-lg)',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '750',
+  },
+  closeModalBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+  },
+  modalForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  warningSummaryRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 12px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+    fontSize: '0.85rem',
+    border: '1px solid var(--border-glass)',
+  },
+  dangerSummaryRow: {
+    display: 'flex',
+    gap: '12px',
+    padding: '12px 16px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    color: 'var(--danger-color)',
+    border: '1px solid rgba(239, 68, 68, 0.15)',
+  },
+  dangerSummaryTitle: {
+    fontSize: '0.95rem',
+    fontWeight: '750',
+  },
+  dangerSummaryDesc: {
+    fontSize: '0.8rem',
+    lineHeight: '1.4',
+    marginTop: '2px',
+    color: 'var(--text-secondary)',
+  },
+  pwdInputRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  genBtn: {
+    height: '45px',
+    fontSize: '0.85rem',
+    padding: '0 12px',
+  },
+  copiedBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.8rem',
+    color: 'var(--success-color)',
+    fontWeight: '700',
+    marginTop: '2px',
+  },
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
+    marginTop: '12px',
   },
 };

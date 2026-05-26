@@ -71,7 +71,7 @@ router.post('/login', async (req, res) => {
   try {
     // 1. Fetch user records
     const userRes = await query(
-      'SELECT id, email, password_hash, role, avatar_url FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, role, avatar_url, is_disabled FROM users WHERE email = $1',
       [email.trim().toLowerCase()]
     );
 
@@ -81,7 +81,12 @@ router.post('/login', async (req, res) => {
 
     const user = userRes.rows[0];
 
-    // 2. Verify hashed password
+    // Check if account is disabled (Req 38)
+    if (user.is_disabled) {
+      return res.status(403).json({ error: 'Your account has been disabled by a system administrator. Please contact support.' });
+    }
+
+    // 2. Verify Hashed Password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password credentials.' });
