@@ -72,6 +72,11 @@ async function queryExternalISBN(isbn) {
             publication_date: info.publishedDate || null,
           };
         }
+      } else {
+        console.error(`⚠️ Google Books ISBN lookup responded with status: ${res.status}`);
+        if (res.status === 429) {
+          console.error(`💡 Rate limited by Google. Consider setting a GOOGLE_BOOKS_API_KEY in your .env configuration.`);
+        }
       }
     } catch (err) {
       console.error('⚠️ Google Books fetch failed:', err.message);
@@ -197,6 +202,11 @@ router.get('/search', async (req, res) => {
               }
             });
           }
+        } else {
+          console.error(`⚠️ Google Books Search API responded with status: ${gRes.status}`);
+          if (gRes.status === 429) {
+            console.error(`💡 Rate limited by Google. Consider setting a GOOGLE_BOOKS_API_KEY in your .env configuration.`);
+          }
         }
       } catch (err) {
         console.error('⚠️ Google Books search request failed:', err.message);
@@ -209,7 +219,7 @@ router.get('/search', async (req, res) => {
         console.log(`🌐 Querying OpenLibrary Search API for: "${cleanedQuery}"...`);
         const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(cleanedQuery)}&limit=10`;
 
-        const olRes = await withTimeout(fetch(url), 5000, 'OpenLibrary search request timed out');
+        const olRes = await withTimeout(fetch(url), 10000, 'OpenLibrary search request timed out');
         if (olRes.ok) {
           const data = await olRes.json();
           if (data.docs && data.docs.length > 0) {

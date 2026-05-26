@@ -37,6 +37,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-bookbinder_super_secret_session_token_key}
       BOOKBINDER_ADMIN_EMAIL: ${BOOKBINDER_ADMIN_EMAIL:-admin@library.com}
       BOOKBINDER_ADMIN_PASS: ${BOOKBINDER_ADMIN_PASS:-adminpassword123}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
       NODE_ENV: production
     volumes:
       # Persistent storage volume for user avatar image uploads
