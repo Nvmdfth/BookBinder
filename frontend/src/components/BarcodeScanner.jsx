@@ -93,18 +93,34 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
 
       setIsActive(true);
 
-      await html5Qrcode.start(
-        { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
-        config,
-        (decodedText) => {
-          // ISBN found!
-          triggerSuccessSignals();
-          onScanSuccess(decodedText);
-        },
-        (error) => {
-          if (onScanError) onScanError(error);
-        }
-      );
+      try {
+        await html5Qrcode.start(
+          { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
+          config,
+          (decodedText) => {
+            // ISBN found!
+            triggerSuccessSignals();
+            onScanSuccess(decodedText);
+          },
+          (error) => {
+            if (onScanError) onScanError(error);
+          }
+        );
+      } catch (envErr) {
+        console.warn('Rear camera environment constraint failed, trying default camera:', envErr);
+        // Fallback to default webcam constraints (works on desktops/laptops with single webcams)
+        await html5Qrcode.start(
+          {}, // Empty constraints allows browser to fallback to default webcam
+          config,
+          (decodedText) => {
+            triggerSuccessSignals();
+            onScanSuccess(decodedText);
+          },
+          (error) => {
+            if (onScanError) onScanError(error);
+          }
+        );
+      }
 
     } catch (err) {
       console.error('Camera starting failed:', err);
