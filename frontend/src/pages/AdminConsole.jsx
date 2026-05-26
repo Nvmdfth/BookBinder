@@ -405,7 +405,7 @@ export default function AdminConsole() {
                   <th style={styles.th}>System Role</th>
                   <th style={styles.th}>Physical Inventory</th>
                   <th style={styles.th}>Account Status</th>
-                  <th style={styles.th} style={{ textAlign: 'right' }}>Administration Actions</th>
+                  <th style={{ ...styles.th, textAlign: 'right' }}>Administration Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -475,7 +475,7 @@ export default function AdminConsole() {
                       </td>
 
                       {/* interactive user management console */}
-                      <td style={styles.td} style={{ textAlign: 'right' }}>
+                      <td style={{ ...styles.td, textAlign: 'right' }}>
                         <div style={styles.actionsCell}>
                           {isSelf ? (
                             <span style={styles.shieldedLabel}>Shielded</span>
@@ -1006,7 +1006,6 @@ const styles = {
   },
   actionIconBtn: {
     background: 'none',
-    border: 'none',
     cursor: 'pointer',
     padding: '6px',
     borderRadius: '4px',
