@@ -1,0 +1,68 @@
+# Antigravity Agent Ignore File
+# Specifies files and folders that the Antigravity AI should ignore during searches, indexing, and context aggregation.
+
+# Version control
+.git/
+
+# Package manager lockfiles and dependency folders (extremely large, degrades search speed)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# Build and deployment directories
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# Local databases and persistent data directories
+pg_data/
+db_data/
+postgres-data/
+*.db
+*.sqlite
+
+# Logs and debug files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and secrets (avoid loading raw API keys in general search unless targeted)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# System / OS-specific files
+.DS_Store
+Thumbs.db
+
+# Media assets (images, video, archives - non-text files)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.webp
+*.mp4
+*.webm
+*.mov
+*.zip
+*.tar
+*.gz
+*.rar
+*.pdf
+*.woff
+*.woff2
+*.ttf
+*.eot
