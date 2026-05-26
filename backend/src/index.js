@@ -1,0 +1,85 @@
+const express = require('express');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const path = require('path');
+const { initDb } = require('./db/db');
+
+// Import Route Handlers
+const authRouter = require('./routes/authRouter');
+const userRouter = require('./routes/userRouter');
+const bookshelfRouter = require('./routes/bookshelfRouter');
+const bookRouter = require('./routes/bookRouter');
+const shareRouter = require('./routes/shareRouter');
+const settingsRouter = require('./routes/settingsRouter');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Enforce modern security middlewares
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || true, // Trust origin headers dynamically in local dev
+  credentials: true,
+}));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Serve uploads statically (Avatars / uploaded covers)
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Register API Route Mounts
+app.use('/api/auth', authRouter);
+app.use('/api/users', userRouter);
+app.use('/api/bookshelves', bookshelfRouter);
+app.use('/api/books', bookRouter);
+app.use('/api/shares', shareRouter);
+app.use('/api/settings', settingsRouter);
+
+// Health Check API
+app.get('/api/health', (req, res) => {
+  return res.json({ status: 'ok', time: new Date() });
+});
+
+// Production SPA Static Hosting & Catch-All Routing
+if (process.env.NODE_ENV === 'production') {
+  const staticPath = path.join(__dirname, '../../frontend/dist');
+  console.log(`📦 Production static frontend path resolved: ${staticPath}`);
+  
+  app.use(express.static(staticPath));
+  
+  // Wildcard mapping ensures React Router routes load correctly
+  app.get('*', (req, res) => {
+    // Prevent swallowing API or assets errors
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return res.status(404).json({ error: 'Endpoint not found.' });
+    }
+    return res.sendFile(path.join(staticPath, 'index.html'));
+  });
+}
+
+// Global Exception Handler
+app.use((err, req, res, next) => {
+  console.error('🔥 Global Express Exception caught:', err.message);
+  return res.status(err.status || 500).json({
+    error: err.message || 'Internal server error processing your request.',
+  });
+});
+
+// Boot Initializations
+async function startServer() {
+  try {
+    // 1. Initial migration checks & seeding
+    await initDb();
+    
+    // 2. Start Listener
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 BookBinder Backend listening on HTTP port: ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Server startup failed due to database errors:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
