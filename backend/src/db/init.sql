@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS bookshelves (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    is_wishlist BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS user_books (
     book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     physical_location TEXT,
     notes TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -71,5 +73,7 @@ VALUES
 ON CONFLICT (key) DO UPDATE 
 SET value = EXCLUDED.value;
 
--- 8. Migration: Add is_disabled column to existing databases safely
+-- 8. Migration: Add columns to existing databases safely
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE bookshelves ADD COLUMN IF NOT EXISTS is_wishlist BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_books ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;

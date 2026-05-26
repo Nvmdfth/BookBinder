@@ -109,7 +109,11 @@ export default function Dashboard() {
               <Link key={shelf.id} to={`/bookshelves/${shelf.id}`} style={styles.shelfCard} className="glass-panel">
                 <div style={styles.shelfCardHeader}>
                   <h3 style={styles.shelfName}>{shelf.name}</h3>
-                  <span style={{ ...styles.badge, ...styles.badgeOwner }}>Owner</span>
+                  {shelf.is_wishlist ? (
+                    <span style={{ ...styles.badge, ...styles.badgeWishlist }}>★ Wishlist</span>
+                  ) : (
+                    <span style={{ ...styles.badge, ...styles.badgeOwner }}>Owner</span>
+                  )}
                 </div>
                 <p style={styles.shelfDesc}>{shelf.description || 'No descriptive notes added yet.'}</p>
                 <div style={styles.cardFooter}>
@@ -138,14 +142,18 @@ export default function Dashboard() {
               <Link key={shelf.id} to={`/bookshelves/${shelf.id}`} style={styles.shelfCard} className="glass-panel">
                 <div style={styles.shelfCardHeader}>
                   <h3 style={styles.shelfName}>{shelf.name}</h3>
-                  <span
-                    style={{
-                      ...styles.badge,
-                      ...(shelf.role === 'collaborator' ? styles.badgeCollab : styles.badgeViewer),
-                    }}
-                  >
-                    {shelf.role}
-                  </span>
+                  {shelf.is_wishlist ? (
+                    <span style={{ ...styles.badge, ...styles.badgeWishlist }}>★ Wishlist</span>
+                  ) : (
+                    <span
+                      style={{
+                        ...styles.badge,
+                        ...(shelf.role === 'collaborator' ? styles.badgeCollab : styles.badgeViewer),
+                      }}
+                    >
+                      {shelf.role}
+                    </span>
+                  )}
                 </div>
                 <p style={styles.shelfDesc}>{shelf.description || 'No descriptive notes added yet.'}</p>
                 <div style={styles.cardFooter}>
@@ -302,6 +310,11 @@ const styles = {
   badgeOwner: {
     backgroundColor: 'var(--accent-light)',
     color: 'var(--accent-color)',
+  },
+  badgeWishlist: {
+    backgroundColor: 'rgba(234, 179, 8, 0.1)',
+    color: '#eab308',
+    border: '1px solid rgba(234, 179, 8, 0.2)',
   },
   badgeCollab: {
     backgroundColor: 'rgba(16, 185, 129, 0.1)',

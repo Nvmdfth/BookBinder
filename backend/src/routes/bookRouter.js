@@ -117,6 +117,138 @@ async function queryExternalISBN(isbn) {
 }
 
 /**
+ * GET /api/books/search - Search for books by title or author wildcards locally & externally (Req 1.2 Search)
+ */
+router.get('/search', async (req, res) => {
+  const queryStr = req.query.q;
+
+  if (!queryStr || queryStr.trim().length < 2) {
+    return res.status(400).json({ error: 'Search query must be at least 2 characters long.' });
+  }
+
+  try {
+    const cleanedQuery = queryStr.trim();
+    
+    // 1. Fetch system switch settings for external searches
+    const settingsRes = await query(
+      "SELECT key, value FROM system_settings WHERE key IN ('enable_google_books', 'enable_open_library')"
+    );
+    
+    const settings = {};
+    settingsRes.rows.forEach(r => {
+      settings[r.key] = r.value === 'true';
+    });
+
+    // 2. Search local database first using ILIKE wildcard searches
+    const localBooks = await query(
+      `SELECT id, isbn, title, author, publisher, cover_image_url, page_count, publication_date
+       FROM books
+       WHERE title ILIKE $1 OR author ILIKE $1
+       LIMIT 10`,
+      [`%${cleanedQuery}%`]
+    );
+
+    let results = localBooks.rows.map(b => ({
+      ...b,
+      source: 'local',
+    }));
+
+    const seenISBNs = new Set(results.map(r => r.isbn).filter(Boolean));
+
+    // 3. Search Google Books if enabled
+    if (settings.enable_google_books) {
+      try {
+        console.log(`🌐 Querying Google Books Search API for: "${cleanedQuery}"...`);
+        let url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(cleanedQuery)}&maxResults=10`;
+        if (process.env.GOOGLE_BOOKS_API_KEY) {
+          url += `&key=${process.env.GOOGLE_BOOKS_API_KEY}`;
+        }
+
+        const gRes = await withTimeout(fetch(url), 5000, 'Google Books search request timed out');
+        if (gRes.ok) {
+          const data = await gRes.json();
+          if (data.items && data.items.length > 0) {
+            data.items.forEach(item => {
+              const info = item.volumeInfo;
+              if (info && info.title) {
+                // Resolve ISBN
+                let isbn = null;
+                if (info.industryIdentifiers) {
+                  const isbn13 = info.industryIdentifiers.find(id => id.type === 'ISBN_13');
+                  const isbn10 = info.industryIdentifiers.find(id => id.type === 'ISBN_10');
+                  isbn = isbn13 ? isbn13.identifier : (isbn10 ? isbn10.identifier : null);
+                }
+
+                // If ISBN already resolved in local hits, skip to avoid duplicates
+                if (isbn && seenISBNs.has(isbn)) return;
+
+                if (isbn) seenISBNs.add(isbn);
+
+                results.push({
+                  isbn: isbn || `GOOGLE-${item.id}`,
+                  title: info.title,
+                  author: info.authors ? info.authors.join(', ') : 'Unknown Author',
+                  publisher: info.publisher || 'Unknown Publisher',
+                  cover_image_url: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail) : null,
+                  page_count: info.pageCount || null,
+                  publication_date: info.publishedDate || null,
+                  source: 'google_books',
+                });
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ Google Books search request failed:', err.message);
+      }
+    }
+
+    // 4. Search OpenLibrary if enabled and we have space
+    if (settings.enable_open_library && results.length < 15) {
+      try {
+        console.log(`🌐 Querying OpenLibrary Search API for: "${cleanedQuery}"...`);
+        const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(cleanedQuery)}&limit=10`;
+
+        const olRes = await withTimeout(fetch(url), 5000, 'OpenLibrary search request timed out');
+        if (olRes.ok) {
+          const data = await olRes.json();
+          if (data.docs && data.docs.length > 0) {
+            data.docs.forEach(doc => {
+              let isbn = doc.isbn ? doc.isbn[0] : null;
+
+              if (isbn && seenISBNs.has(isbn)) return;
+
+              if (isbn) seenISBNs.add(isbn);
+
+              const coverUrl = doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null;
+
+              results.push({
+                isbn: isbn || `OPENLIBRARY-${doc.key.split('/').pop()}`,
+                title: doc.title,
+                author: doc.author_name ? doc.author_name.join(', ') : 'Unknown Author',
+                publisher: doc.publisher ? doc.publisher[0] : 'Unknown Publisher',
+                cover_image_url: coverUrl,
+                page_count: doc.number_of_pages_median || null,
+                publication_date: doc.first_publish_year ? String(doc.first_publish_year) : null,
+                source: 'open_library',
+              });
+            });
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ OpenLibrary search request failed:', err.message);
+      }
+    }
+
+    return res.json(results.slice(0, 15));
+
+  } catch (error) {
+    console.error('Search Book Router Error:', error);
+    return res.status(500).json({ error: 'Internal server error executing search.' });
+  }
+});
+
+/**
  * POST /api/books/scan/:isbn - Handle scan pipeline (cached check -> API lookup -> user mapping)
  */
 router.post('/scan/:isbn', async (req, res, next) => {
@@ -354,7 +486,7 @@ router.post('/manual', async (req, res) => {
  */
 router.put('/mapping/:mappingId', async (req, res) => {
   const mappingId = parseInt(req.params.mappingId, 10);
-  const { physicalLocation, notes } = req.body;
+  const { physicalLocation, notes, isRead } = req.body;
 
   if (isNaN(mappingId)) {
     return res.status(400).json({ error: 'Invalid mapping ID.' });
@@ -362,29 +494,29 @@ router.put('/mapping/:mappingId', async (req, res) => {
 
   try {
     // 1. Resolve bookshelf association to verify RBAC access
-    const mapRes = await query('SELECT bookshelf_id FROM user_books WHERE id = $1', [mappingId]);
+    const mapRes = await query('SELECT bookshelf_id, physical_location, notes, is_read FROM user_books WHERE id = $1', [mappingId]);
     if (mapRes.rows.length === 0) {
       return res.status(404).json({ error: 'Book bookshelf association not found.' });
     }
 
-    const bookshelfId = mapRes.rows[0].bookshelf_id;
+    const { bookshelf_id: bookshelfId, physical_location: currentLoc, notes: currentNotes, is_read: currentIsRead } = mapRes.rows[0];
 
     // 2. Verify access to shelf
     req.params.bookshelfId = bookshelfId;
     verifyBookshelfAccess(req, res, async () => {
       requireCollaborator(req, res, async () => {
         try {
-          // 3. Update annotations (notes and physical location are shared on the shelf mapping)
+          const finalLoc = physicalLocation !== undefined ? (physicalLocation ? physicalLocation.trim() : null) : currentLoc;
+          const finalNotes = notes !== undefined ? (notes ? notes.trim() : null) : currentNotes;
+          const finalIsRead = isRead !== undefined ? !!isRead : currentIsRead;
+
+          // 3. Update annotations & read status (Req 1.2 Read Status)
           const updatedMap = await query(
             `UPDATE user_books 
-             SET physical_location = $1, notes = $2 
-             WHERE id = $3 
-             RETURNING id, physical_location, notes, bookshelf_id, book_id`,
-            [
-              physicalLocation ? physicalLocation.trim() : null,
-              notes ? notes.trim() : null,
-              mappingId,
-            ]
+             SET physical_location = $1, notes = $2, is_read = $3
+             WHERE id = $4 
+             RETURNING id, physical_location, notes, is_read, bookshelf_id, book_id`,
+            [finalLoc, finalNotes, finalIsRead, mappingId]
           );
 
           return res.json({

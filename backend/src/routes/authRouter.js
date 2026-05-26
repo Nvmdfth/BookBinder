@@ -47,6 +47,9 @@ router.post('/register', async (req, res) => {
       [email.trim().toLowerCase(), passHash]
     );
 
+    // Seed the default wishlist shelf immediately on registration!
+    await ensureUserWishlist(newUser.rows[0].id);
+
     return res.status(201).json({
       message: 'Account registered successfully.',
       user: newUser.rows[0]
@@ -110,6 +113,9 @@ router.post('/login', async (req, res) => {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
     });
 
+    // Seed the default wishlist shelf if missing on login!
+    await ensureUserWishlist(user.id);
+
     return res.json({
       message: 'Login successful.',
       user: {
@@ -135,10 +141,35 @@ router.post('/logout', (req, res) => {
 });
 
 /**
+ * Helper: Ensure each user has a default system Wishlist shelf (Req 1.2 Wishlist)
+ */
+async function ensureUserWishlist(userId) {
+  try {
+    const checkWishlist = await query(
+      'SELECT id FROM bookshelves WHERE user_id = $1 AND is_wishlist = TRUE',
+      [userId]
+    );
+    if (checkWishlist.rows.length === 0) {
+      console.log(`✨ Seeding default Wishlist bookshelf for user ID: ${userId}...`);
+      await query(
+        `INSERT INTO bookshelves (user_id, name, description, is_wishlist)
+         VALUES ($1, 'Wishlist', 'My personal reading wishlist for books I want to read.', TRUE)`,
+        [userId]
+      );
+    }
+  } catch (err) {
+    console.error('⚠️ Failed to seed/verify Wishlist bookshelf:', err);
+  }
+}
+
+/**
  * GET /api/auth/me - Verify Current Session
  */
 router.get('/me', authenticateToken, async (req, res) => {
   try {
+    // Seed the default wishlist shelf if missing on me check!
+    await ensureUserWishlist(req.user.id);
+
     // Return complete profile mapping
     const userRes = await query(
       'SELECT id, email, role, avatar_url FROM users WHERE id = $1',

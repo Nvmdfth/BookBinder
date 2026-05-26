@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { 
   Book, MapPin, Notebook, Plus, Pencil, Trash2, Users, X, Share2, 
-  Settings, AlertTriangle, ArrowLeft, Camera, FileText, CheckCircle
+  Settings, AlertTriangle, ArrowLeft, Camera, FileText, CheckCircle,
+  Search, Bookmark, Check
 } from 'lucide-react';
 
 export default function BookshelfDetails() {
@@ -43,6 +44,108 @@ export default function BookshelfDetails() {
   // Annotation Edit Forms State
   const [editLocation, setEditLocation] = useState('');
   const [editNotes, setEditNotes] = useState('');
+
+  // Wildcard Search Forms State (Req 1.2 Search)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [ingestingBookIsbn, setIngestingBookIsbn] = useState(null);
+
+  const handleWildcardSearch = async (e) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) return;
+
+    setSearchLoading(true);
+    setSearchError(null);
+    try {
+      const res = await fetch(`/api/books/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Search query failed.');
+      setSearchResults(data);
+    } catch (err) {
+      setSearchError(err.message);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchAddBook = async (book) => {
+    setIngestingBookIsbn(book.isbn);
+    try {
+      const res = await fetch('/api/books/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookshelfId: id,
+          isbn: book.isbn,
+          title: book.title,
+          author: book.author,
+          publisher: book.publisher,
+          coverImageUrl: book.cover_image_url,
+          pageCount: book.page_count,
+          publicationDate: book.publication_date,
+          physicalLocation: '',
+          notes: '',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add search result.');
+
+      // Update UI list mapping state
+      setShelf((prev) => ({
+        ...prev,
+        books: [
+          {
+            mapping_id: data.mapping.id,
+            book_id: data.book.id,
+            isbn: data.book.isbn,
+            title: data.book.title,
+            author: data.book.author,
+            publisher: data.book.publisher,
+            cover_image_url: data.book.cover_image_url,
+            page_count: data.book.page_count,
+            publication_date: data.book.publication_date,
+            physical_location: data.mapping.physical_location,
+            notes: data.mapping.notes,
+            is_read: false,
+          },
+          ...prev.books,
+        ],
+      }));
+
+      alert(`"${book.title}" added to shelf successfully!`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIngestingBookIsbn(null);
+    }
+  };
+
+  const handleToggleReadStatus = async (b) => {
+    const nextReadState = !b.is_read;
+    try {
+      const res = await fetch(`/api/books/mapping/${b.mapping_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isRead: nextReadState }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update read status.');
+
+      // Update local state
+      setShelf((prev) => ({
+        ...prev,
+        books: prev.books.map((book) =>
+          book.mapping_id === b.mapping_id ? { ...book, is_read: data.mapping.is_read } : book
+        ),
+      }));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   const fetchShelfDetails = async () => {
     try {
@@ -377,9 +480,11 @@ export default function BookshelfDetails() {
                   <Share2 size={18} />
                   <span>Share Shelf</span>
                 </button>
-                <button className="btn btn-danger" onClick={handleDeleteShelf} style={styles.deleteShelfBtn}>
-                  <Trash2 size={18} />
-                </button>
+                {!shelf.isWishlist && (
+                  <button className="btn btn-danger" onClick={handleDeleteShelf} style={styles.deleteShelfBtn}>
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -398,6 +503,14 @@ export default function BookshelfDetails() {
           </button>
           
           <button 
+            style={{ ...styles.tabBtn, ...(activeTab === 'search' ? styles.tabBtnActive : {}) }}
+            onClick={() => setActiveTab('search')}
+          >
+            <Search size={18} />
+            <span>Search & Add</span>
+          </button>
+
+          <button 
             style={{ ...styles.tabBtn, ...(activeTab === 'scan' ? styles.tabBtnActive : {}) }}
             onClick={() => setActiveTab('scan')}
           >
@@ -412,6 +525,118 @@ export default function BookshelfDetails() {
             <Plus size={18} />
             <span>Add Manually</span>
           </button>
+        </div>
+      )}
+
+      {/* 🔍 Search & Add Wildcard Books Tab (Req 1.2 Search) */}
+      {isCollaborator && activeTab === 'search' && (
+        <div style={styles.searchForm} className="glass-panel">
+          <h2 style={styles.tabTitle}>Wildcard Catalog Search</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '12px', width: '100%' }}>
+            Type a wildcard title or author to query the local cache and external volume APIs.
+          </p>
+
+          <form onSubmit={handleWildcardSearch} style={styles.searchBarRow}>
+            <input 
+              type="text" 
+              className="form-input" 
+              style={{ flex: 1, height: '45px' }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by title, author, or publisher (e.g. Tolkien)"
+              required
+              disabled={searchLoading}
+            />
+            <button type="submit" className="btn btn-primary" style={{ height: '45px' }} disabled={searchLoading}>
+              <Search size={18} />
+              <span>Search</span>
+            </button>
+          </form>
+
+          {searchError && (
+            <div style={{ ...styles.scanMessage, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-color)', alignSelf: 'stretch', maxWidth: 'none' }}>
+              <AlertTriangle size={18} />
+              <span>{searchError}</span>
+            </div>
+          )}
+
+          {searchLoading && (
+            <div style={styles.skeletonList}>
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="skeleton" style={styles.skeletonItem}></div>
+              ))}
+            </div>
+          )}
+
+          {!searchLoading && searchResults.length > 0 && (
+            <div style={styles.searchCardList}>
+              {searchResults.map((book, idx) => {
+                const bookKey = book.isbn || `SEARCH-${idx}`;
+                
+                // Deduplicate check if book is already mapped on this shelf
+                const isAlreadyOnShelf = book.isbn && shelf.books.some(sb => sb.isbn === book.isbn);
+                const isAdding = ingestingBookIsbn === book.isbn;
+
+                return (
+                  <div key={bookKey} style={styles.searchCard}>
+                    {book.cover_image_url ? (
+                      <img 
+                        src={book.cover_image_url} 
+                        alt="" 
+                        style={styles.searchCoverImg} 
+                        onError={handleImageError} 
+                      />
+                    ) : (
+                      <div style={styles.searchCoverFallback}>
+                        <Book size={20} />
+                      </div>
+                    )}
+
+                    <div style={styles.searchInfo}>
+                      <span style={styles.searchTitle} title={book.title}>{book.title}</span>
+                      <span style={styles.searchAuthor}>{book.author}</span>
+                      <div style={styles.searchMeta}>
+                        {book.publisher && <span>{book.publisher}</span>}
+                        {book.publication_date && <span>• {book.publication_date}</span>}
+                        {book.page_count && <span>• {book.page_count} pages</span>}
+                      </div>
+                      
+                      <span style={{
+                        ...styles.sourceBadge,
+                        ...(book.source === 'local' ? styles.sourceLocal : 
+                            book.source === 'google_books' ? styles.sourceGoogle : styles.sourceOpenLibrary)
+                      }}>
+                        {book.source === 'local' ? 'In Library (Cached)' : 
+                         book.source === 'google_books' ? 'Google Books' : 'Open Library'}
+                      </span>
+                    </div>
+
+                    {isAlreadyOnShelf ? (
+                      <button className="btn btn-secondary" style={{ height: '36px', padding: '0 12px', fontSize: '0.8rem' }} disabled>
+                        <Check size={14} />
+                        <span>Added</span>
+                      </button>
+                    ) : (
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ height: '36px', padding: '0 12px', fontSize: '0.8rem' }} 
+                        onClick={() => handleSearchAddBook(book)}
+                        disabled={isAdding}
+                      >
+                        {isAdding ? 'Adding...' : 'Add to Shelf'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!searchLoading && searchResults.length === 0 && searchQuery && (
+            <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', width: '100%' }}>
+              No books resolved for "{searchQuery}". Try another keyword or check system settings toggles.
+            </div>
+          )}
         </div>
       )}
 
@@ -602,7 +827,24 @@ export default function BookshelfDetails() {
 
                   {/* Book details context */}
                   <div style={styles.bookDetails}>
-                    <h3 style={styles.bookTitle} title={b.title}>{b.title}</h3>
+                    <div style={styles.bookTitleHeader}>
+                      <h3 style={styles.bookTitle} title={b.title}>{b.title}</h3>
+                      
+                      {/* Read / Unread toggle indicator badge (Req 1.2 Read Status) */}
+                      <button
+                        style={{
+                          ...styles.readStatusBadge,
+                          ...(b.is_read ? styles.readBadgeActive : styles.readBadgeInactive),
+                          cursor: isCollaborator ? 'pointer' : 'default',
+                        }}
+                        onClick={() => isCollaborator && handleToggleReadStatus(b)}
+                        title={isCollaborator ? `Mark as ${b.is_read ? 'unread' : 'read'}` : `Book is ${b.is_read ? 'read' : 'unread'}`}
+                        disabled={!isCollaborator}
+                      >
+                        {b.is_read ? <CheckCircle size={10} style={{ color: 'var(--success-color)' }} /> : <Bookmark size={10} />}
+                        <span>{b.is_read ? 'Read' : 'Unread'}</span>
+                      </button>
+                    </div>
                     <span style={styles.bookAuthor}>{b.author}</span>
                     
                     <div style={styles.metaRow}>
@@ -1238,5 +1480,147 @@ const styles = {
     padding: '4px',
     display: 'flex',
     alignItems: 'center',
+  },
+  bookTitleHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '8px',
+    width: '100%',
+  },
+  readStatusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    borderRadius: '12px',
+    fontSize: '0.65rem',
+    fontWeight: '750',
+    border: 'none',
+    transition: 'var(--transition-smooth)',
+    whiteSpace: 'nowrap',
+  },
+  readBadgeActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    color: 'var(--success-color)',
+    border: '1px solid rgba(16, 185, 129, 0.2)',
+  },
+  readBadgeInactive: {
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-muted)',
+    border: '1px solid var(--border-glass)',
+  },
+  searchForm: {
+    padding: '30px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    width: '100%',
+  },
+  searchBarRow: {
+    display: 'flex',
+    gap: '12px',
+    width: '100%',
+  },
+  searchCardList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    width: '100%',
+    marginTop: '20px',
+  },
+  searchCard: {
+    display: 'flex',
+    gap: '16px',
+    padding: '16px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--border-glass)',
+    backgroundColor: 'var(--bg-secondary)',
+    alignItems: 'center',
+    width: '100%',
+  },
+  searchCoverImg: {
+    width: '60px',
+    height: '84px',
+    objectFit: 'cover',
+    borderRadius: 'var(--radius-xs)',
+    boxShadow: 'var(--shadow-sm)',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  searchCoverFallback: {
+    width: '60px',
+    height: '84px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 'var(--radius-xs)',
+    backgroundColor: 'var(--bg-primary)',
+    border: '1px solid var(--border-glass)',
+    color: 'var(--text-muted)',
+  },
+  searchInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: 1,
+    overflow: 'hidden',
+    textAlign: 'left',
+  },
+  searchTitle: {
+    fontSize: '0.95rem',
+    fontWeight: '750',
+    color: 'var(--text-primary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  searchAuthor: {
+    fontSize: '0.8rem',
+    color: 'var(--text-secondary)',
+    fontWeight: '600',
+  },
+  searchMeta: {
+    display: 'flex',
+    gap: '8px',
+    fontSize: '0.7rem',
+    color: 'var(--text-muted)',
+    flexWrap: 'wrap',
+  },
+  sourceBadge: {
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontSize: '0.65rem',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: '0.02em',
+    width: 'fit-content',
+    marginTop: '2px',
+  },
+  sourceLocal: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    color: 'var(--success-color)',
+    border: '1px solid rgba(16, 185, 129, 0.2)',
+  },
+  sourceGoogle: {
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    color: 'var(--accent-color)',
+    border: '1px solid rgba(99, 102, 241, 0.2)',
+  },
+  sourceOpenLibrary: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    color: 'var(--danger-color)',
+    border: '1px solid rgba(239, 68, 68, 0.2)',
+  },
+  skeletonList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    width: '100%',
+    marginTop: '20px',
+  },
+  skeletonItem: {
+    height: '116px',
+    width: '100%',
+    borderRadius: 'var(--radius-sm)',
   },
 };

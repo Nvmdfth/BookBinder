@@ -17,14 +17,14 @@ router.get('/', async (req, res) => {
   try {
     // Elegant SQL query utilizing UNION ALL to pull owned and shared libraries in a single run
     const shelvesRes = await query(
-      `SELECT b.id, b.name, b.description, b.created_at, 'owner' AS role, u.email AS owner_email
+      `SELECT b.id, b.name, b.description, b.created_at, 'owner' AS role, u.email AS owner_email, b.is_wishlist
        FROM bookshelves b
        JOIN users u ON b.user_id = u.id
        WHERE b.user_id = $1
        
        UNION ALL
        
-       SELECT b.id, b.name, b.description, b.created_at, s.permission AS role, u.email AS owner_email
+       SELECT b.id, b.name, b.description, b.created_at, s.permission AS role, u.email AS owner_email, b.is_wishlist
        FROM bookshelves b
        JOIN shelf_shares s ON b.id = s.bookshelf_id
        JOIN users u ON b.user_id = u.id
@@ -85,7 +85,7 @@ router.get('/:id', verifyBookshelfAccess, async (req, res) => {
   try {
     // 1. Query shelf details (owner context)
     const shelfRes = await query(
-      `SELECT b.id, b.name, b.description, b.created_at, u.email AS owner_email, u.id AS owner_id
+      `SELECT b.id, b.name, b.description, b.created_at, u.email AS owner_email, u.id AS owner_id, b.is_wishlist
        FROM bookshelves b
        JOIN users u ON b.user_id = u.id
        WHERE b.id = $1`,
@@ -98,7 +98,7 @@ router.get('/:id', verifyBookshelfAccess, async (req, res) => {
     const booksRes = await query(
       `SELECT ub.id AS mapping_id, b.id AS book_id, b.isbn, b.title, b.author, 
               b.publisher, b.cover_image_url, b.page_count, b.publication_date, 
-              ub.physical_location, ub.notes, ub.created_at AS mapping_created_at
+              ub.physical_location, ub.notes, ub.created_at AS mapping_created_at, ub.is_read
        FROM user_books ub
        JOIN books b ON ub.book_id = b.id
        WHERE ub.bookshelf_id = $1
@@ -112,6 +112,7 @@ router.get('/:id', verifyBookshelfAccess, async (req, res) => {
       description: shelf.description,
       ownerEmail: shelf.owner_email,
       isOwner: shelf.owner_id === req.user.id,
+      isWishlist: !!shelf.is_wishlist,
       accessRole: userAccessRole, // 'owner', 'collaborator', or 'view'
       books: booksRes.rows,
     });
@@ -134,6 +135,12 @@ router.put('/:id', verifyBookshelfAccess, requireOwner, async (req, res) => {
   }
 
   try {
+    // Safety guard preventing modifications to default system Wishlist shelf
+    const checkWishlist = await query('SELECT is_wishlist FROM bookshelves WHERE id = $1', [bookshelfId]);
+    if (checkWishlist.rows.length > 0 && checkWishlist.rows[0].is_wishlist) {
+      return res.status(400).json({ error: 'Operation blocked. The default system Wishlist bookshelf details cannot be modified.' });
+    }
+
     const updatedShelf = await query(
       `UPDATE bookshelves 
        SET name = $1, description = $2 
@@ -160,6 +167,12 @@ router.post('/:id/delete', verifyBookshelfAccess, requireOwner, async (req, res)
   const bookshelfId = req.shelfAccess.bookshelfId;
 
   try {
+    // Safety guard preventing deletion of default system Wishlist shelf
+    const checkWishlist = await query('SELECT is_wishlist FROM bookshelves WHERE id = $1', [bookshelfId]);
+    if (checkWishlist.rows.length > 0 && checkWishlist.rows[0].is_wishlist) {
+      return res.status(400).json({ error: 'Operation blocked. The default system Wishlist bookshelf cannot be deleted.' });
+    }
+
     await query('DELETE FROM bookshelves WHERE id = $1', [bookshelfId]);
     return res.json({ message: 'Bookshelf and all its mappings removed successfully.' });
   } catch (error) {
