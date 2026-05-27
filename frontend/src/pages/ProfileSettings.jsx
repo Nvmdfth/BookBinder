@@ -1,12 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthProvider';
+import { useTheme } from '../context/ThemeProvider';
 import { 
   User, Mail, ShieldAlert, Key, Upload, AlertCircle, CheckCircle,
-  FileSpreadsheet, Play, CheckCircle2, MinusCircle, RefreshCw, X, Plus, FolderPlus, Info
+  FileSpreadsheet, Play, CheckCircle2, MinusCircle, RefreshCw, X, Plus, FolderPlus, Info,
+  Palette, Sun, Moon
 } from 'lucide-react';
 
 export default function ProfileSettings() {
   const { user, updateProfile, updateAvatarUrl } = useAuth();
+  const { theme, setTheme, palette, setPalette, availablePalettes } = useTheme();
   
   const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -583,6 +586,73 @@ export default function ProfileSettings() {
         </div>
       </div>
 
+      {/* 🎨 Theme Selection & Aesthetic Personalization Card */}
+      <div style={styles.bulkImportCard} className="glass-panel">
+        <h2 style={styles.cardTitle}>
+          <Palette size={22} style={{ color: 'var(--accent-color)', verticalAlign: 'middle', marginRight: '8px' }} />
+          <span>Aesthetic Personalization</span>
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '24px', marginTop: '4px' }}>
+          Customize your BookBinder interface using vibrant, harmonized color palettes tailored for reading.
+        </p>
+
+        {/* Mode Selector */}
+        <div style={styles.themeModeSelectorRow}>
+          <span style={styles.settingLabel}>Display Mode</span>
+          <div style={styles.toggleButtonGroup}>
+            <button 
+              type="button" 
+              className={`btn ${theme === 'light' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setTheme('light')}
+              style={styles.toggleBtn}
+            >
+              <Sun size={16} />
+              <span>Light Mode</span>
+            </button>
+            <button 
+              type="button" 
+              className={`btn ${theme === 'dark' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setTheme('dark')}
+              style={styles.toggleBtn}
+            >
+              <Moon size={16} />
+              <span>Dark Mode</span>
+            </button>
+          </div>
+        </div>
+
+        <div style={styles.settingsDivider}></div>
+
+        {/* Palette Selector Swatches Grid */}
+        <span style={styles.settingLabel}>Color Palette Swatch</span>
+        <div style={styles.paletteGrid}>
+          {availablePalettes.map((p) => {
+            const isSelected = palette === p.id;
+            return (
+              <div 
+                key={p.id}
+                style={{
+                  ...styles.paletteCard,
+                  borderColor: isSelected ? 'var(--accent-color)' : 'var(--border-glass)',
+                  boxShadow: isSelected ? '0 0 0 2px var(--accent-color)' : 'none',
+                }}
+                onClick={() => setPalette(p.id)}
+                className="palette-hover-btn"
+              >
+                <div style={styles.paletteSwatches}>
+                  <span style={{ ...styles.swatch, backgroundColor: p.primary }}></span>
+                  <span style={{ ...styles.swatch, backgroundColor: p.secondary }}></span>
+                </div>
+                <div style={styles.paletteInfo}>
+                  <div style={styles.paletteName}>{p.name}</div>
+                  <div style={styles.paletteDesc}>{p.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 🚀 Bulk Catalog Ingestion Card (Req 1.3 Bulk Import) */}
       <div style={styles.bulkImportCard} className="glass-panel">
         <h2 style={styles.cardTitle}>Bulk Catalog Ingestion</h2>
@@ -975,6 +1045,81 @@ const styles = {
     flexDirection: 'column',
     gap: '32px',
     width: '100%',
+  },
+  themeModeSelectorRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '20px',
+    flexWrap: 'wrap',
+  },
+  toggleButtonGroup: {
+    display: 'flex',
+    gap: '12px',
+  },
+  toggleBtn: {
+    padding: '8px 16px',
+    fontSize: '0.9rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  settingsDivider: {
+    height: '1px',
+    backgroundColor: 'var(--border-glass)',
+    margin: '24px 0',
+  },
+  settingLabel: {
+    display: 'block',
+    fontSize: '0.9rem',
+    fontWeight: '750',
+    marginBottom: '12px',
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-heading)',
+  },
+  paletteGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+    gap: '16px',
+    width: '100%',
+  },
+  paletteCard: {
+    border: '1px solid var(--border-glass)',
+    borderRadius: 'var(--radius-md)',
+    padding: '16px',
+    display: 'flex',
+    gap: '14px',
+    alignItems: 'center',
+    cursor: 'pointer',
+    backgroundColor: 'var(--bg-glass)',
+    transition: 'all 0.3s ease',
+  },
+  paletteSwatches: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  swatch: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
+    display: 'block',
+    boxShadow: 'var(--shadow-sm)',
+  },
+  paletteInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  paletteName: {
+    fontWeight: '750',
+    fontSize: '0.95rem',
+    color: 'var(--text-primary)',
+  },
+  paletteDesc: {
+    fontSize: '0.75rem',
+    color: 'var(--text-secondary)',
+    lineHeight: '1.2',
   },
   header: {
     display: 'flex',

@@ -77,3 +77,8 @@ SET value = EXCLUDED.value;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE;
 ALTER TABLE bookshelves ADD COLUMN IF NOT EXISTS is_wishlist BOOLEAN DEFAULT FALSE;
 ALTER TABLE user_books ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+
+-- 9. Migration: Add theme and palette columns to the users table safely
+ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(50) DEFAULT 'dark';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS palette VARCHAR(50) DEFAULT 'indigo';
+

@@ -43,7 +43,7 @@ router.post('/register', async (req, res) => {
     const newUser = await query(
       `INSERT INTO users (email, password_hash, role) 
        VALUES ($1, $2, 'user') 
-       RETURNING id, email, role, avatar_url`,
+       RETURNING id, email, role, avatar_url, theme, palette`,
       [email.trim().toLowerCase(), passHash]
     );
 
@@ -74,7 +74,7 @@ router.post('/login', async (req, res) => {
   try {
     // 1. Fetch user records
     const userRes = await query(
-      'SELECT id, email, password_hash, role, avatar_url, is_disabled FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, role, avatar_url, is_disabled, theme, palette FROM users WHERE email = $1',
       [email.trim().toLowerCase()]
     );
 
@@ -123,6 +123,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         avatarUrl: user.avatar_url,
+        theme: user.theme,
+        palette: user.palette,
       }
     });
 
@@ -172,7 +174,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     // Return complete profile mapping
     const userRes = await query(
-      'SELECT id, email, role, avatar_url FROM users WHERE id = $1',
+      'SELECT id, email, role, avatar_url, theme, palette FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -186,6 +188,8 @@ router.get('/me', authenticateToken, async (req, res) => {
       email: user.email,
       role: user.role,
       avatarUrl: user.avatar_url,
+      theme: user.theme,
+      palette: user.palette,
     });
   } catch (error) {
     console.error('Verify Me Error:', error);

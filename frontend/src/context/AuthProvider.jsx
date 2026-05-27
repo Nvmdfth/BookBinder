@@ -89,6 +89,22 @@ export function AuthProvider({ children }) {
     setUser((prev) => (prev ? { ...prev, avatarUrl } : null));
   };
 
+  const updateUserPreferences = async (theme, palette) => {
+    const res = await fetch('/api/users/theme', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme, palette }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to save theme preferences.');
+    }
+
+    setUser((prev) => (prev ? { ...prev, theme, palette } : null));
+    return data;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -100,6 +116,7 @@ export function AuthProvider({ children }) {
         logout,
         updateProfile,
         updateAvatarUrl,
+        updateUserPreferences,
         isAdmin: user?.role === 'admin',
       }}
     >

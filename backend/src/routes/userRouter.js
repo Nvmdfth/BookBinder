@@ -187,4 +187,32 @@ router.post('/profile/avatar', authenticateToken, (req, res) => {
   });
 });
 
+/**
+ * PUT /api/users/theme - Update user theme and palette settings
+ */
+router.put('/theme', authenticateToken, async (req, res) => {
+  const { theme, palette } = req.body;
+  const userId = req.user.id;
+
+  if (!theme || !palette) {
+    return res.status(400).json({ error: 'Both theme and palette preferences are required.' });
+  }
+
+  try {
+    await query(
+      'UPDATE users SET theme = $1, palette = $2, updated_at = NOW() WHERE id = $3',
+      [theme, palette, userId]
+    );
+
+    return res.json({
+      message: 'Theme preferences updated successfully.',
+      theme,
+      palette,
+    });
+  } catch (error) {
+    console.error('Theme Update Route Error:', error);
+    return res.status(500).json({ error: 'Internal server error saving theme preferences.' });
+  }
+});
+
 module.exports = router;

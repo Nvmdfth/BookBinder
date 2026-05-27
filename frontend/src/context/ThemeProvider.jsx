@@ -1,45 +1,76 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthProvider';
 
 const ThemeContext = createContext();
 
+export const PALETTES = [
+  { id: 'indigo', name: 'Indigo Breeze', primary: '#6366f1', secondary: '#a855f7', desc: 'Premium Royal Indigo & Violet accents' },
+  { id: 'lavender', name: 'Midnight Lavender', primary: '#7c3aed', secondary: '#db2777', desc: 'Luxurious violet hues and crimson accents' },
+  { id: 'emerald', name: 'Emerald Rainforest', primary: '#059669', secondary: '#0d9488', desc: 'Nature-centric emerald and deep teal' },
+  { id: 'sunset', name: 'Sunset Oasis', primary: '#ea580c', secondary: '#d97706', desc: 'Warm cozy amber and terracotta' },
+  { id: 'cyberpunk', name: 'Cyberpunk Neon', primary: '#d946ef', secondary: '#06b6d4', desc: 'High-contrast glowing synthetic colors' }
+];
+
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
-    // 1. Check local storage cache first
-    const savedTheme = localStorage.getItem('bookbinder-theme');
-    if (savedTheme) {
-      return savedTheme;
+  const { user, isAuthenticated, updateUserPreferences } = useAuth();
+
+  // Establish state variables synced with authentication context (defaulting to dark + indigo)
+  const [theme, setThemeState] = useState('dark');
+  const [palette, setPaletteState] = useState('indigo');
+
+  // Monitor Auth Context loads to inherit database-persisted aesthetics
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setThemeState(user.theme || 'dark');
+      setPaletteState(user.palette || 'indigo');
+    } else {
+      // Force static defaults for guest users on login/registration views (Dark Mode + Indigo)
+      setThemeState('dark');
+      setPaletteState('indigo');
     }
-    // 2. Fallback: query OS prefers-color-scheme setting (Req 4.1.2)
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return prefersDark ? 'dark' : 'light';
-  });
+  }, [user, isAuthenticated]);
 
   useEffect(() => {
-    // Set HTML dataset mapping to swap variables
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('bookbinder-theme', theme);
-  }, [theme]);
+    document.documentElement.setAttribute('data-palette', palette);
+  }, [theme, palette]);
 
-  // Listener to track dynamic OS changes if user hasn't overridden it
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleMediaChange = (e) => {
-      const savedTheme = localStorage.getItem('bookbinder-theme');
-      if (!savedTheme) {
-        setTheme(e.matches ? 'dark' : 'light');
+  const updatePreferences = async (newTheme, newPalette) => {
+    setThemeState(newTheme);
+    setPaletteState(newPalette);
+    
+    if (isAuthenticated) {
+      try {
+        await updateUserPreferences(newTheme, newPalette);
+      } catch (err) {
+        console.error('Failed to sync theme preferences to database:', err);
       }
-    };
-
-    mediaQuery.addEventListener('change', handleMediaChange);
-    return () => mediaQuery.removeEventListener('change', handleMediaChange);
-  }, []);
+    }
+  };
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    updatePreferences(nextTheme, palette);
+  };
+
+  const setPalette = (nextPalette) => {
+    updatePreferences(theme, nextPalette);
+  };
+
+  const setTheme = (nextTheme) => {
+    updatePreferences(nextTheme, palette);
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, isDark: theme === 'dark' }}>
+    <ThemeContext.Provider value={{ 
+      theme, 
+      setTheme,
+      palette, 
+      setPalette,
+      toggleTheme, 
+      isDark: theme === 'dark',
+      availablePalettes: PALETTES
+    }}>
       {children}
     </ThemeContext.Provider>
   );
