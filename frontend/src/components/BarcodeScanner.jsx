@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, Volume2, VolumeX, AlertCircle } from 'lucide-react';
+import { Camera, Volume2, VolumeX, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   const [isActive, setIsActive] = useState(false);
