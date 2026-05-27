@@ -15,6 +15,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   const [scanError, setScanError] = useState(null);
   
   const qrCodeRef = useRef(null);
+  const isScannerPausedRef = useRef(false);
   const scannerContainerId = 'bookbinder-scanner-view';
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   };
 
   const handleScanLookup = async (isbn) => {
+    isScannerPausedRef.current = true;
     setIsLookupLoading(true);
     setScanError(null);
     setLookupDetails(null);
@@ -102,6 +104,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   const handleConfirmDismiss = () => {
     setLookupDetails(null);
     setScanError(null);
+    isScannerPausedRef.current = false;
     if (qrCodeRef.current) {
       try {
         qrCodeRef.current.resume();
@@ -155,8 +158,10 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
             { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
             config,
             (decodedText) => {
+              if (isScannerPausedRef.current) return;
+              isScannerPausedRef.current = true;
+
               if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-                if (qrCodeRef.current.isPaused()) return;
                 try {
                   qrCodeRef.current.pause(true);
                 } catch (e) {
@@ -178,8 +183,10 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
             {}, // Empty constraints allows browser to fallback to default webcam
             config,
             (decodedText) => {
+              if (isScannerPausedRef.current) return;
+              isScannerPausedRef.current = true;
+
               if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-                if (qrCodeRef.current.isPaused()) return;
                 try {
                   qrCodeRef.current.pause(true);
                 } catch (e) {
@@ -220,6 +227,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   }, [isActive]);
 
   const stopScanner = async () => {
+    isScannerPausedRef.current = false;
     if (qrCodeRef.current && qrCodeRef.current.isScanning) {
       try {
         await qrCodeRef.current.stop();
