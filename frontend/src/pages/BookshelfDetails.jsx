@@ -24,6 +24,7 @@ export default function BookshelfDetails() {
   const [writeableShelves, setWriteableShelves] = useState([]);
   const [targetBookshelfId, setTargetBookshelfId] = useState('');
   const [scanMessage, setScanMessage] = useState(null);
+  const [bookSearchQuery, setBookSearchQuery] = useState('');
   
   // Modal controllers
   const [editingMapping, setEditingMapping] = useState(null); // Mapping row to edit annotations
@@ -458,6 +459,18 @@ export default function BookshelfDetails() {
     e.target.nextSibling.style.display = 'flex'; // Show high-contrast placeholder
   };
 
+  const filteredBooks = shelf?.books ? shelf.books.filter((b) => {
+    const query = bookSearchQuery.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      (b.title && b.title.toLowerCase().includes(query)) ||
+      (b.author && b.author.toLowerCase().includes(query)) ||
+      (b.publisher && b.publisher.toLowerCase().includes(query)) ||
+      (b.physical_location && b.physical_location.toLowerCase().includes(query)) ||
+      (b.notes && b.notes.toLowerCase().includes(query))
+    );
+  }) : [];
+
   if (loading) {
     return (
       <div className="skeleton" style={{ height: '300px', width: '100%', borderRadius: 'var(--radius-md)' }}></div>
@@ -823,34 +836,61 @@ export default function BookshelfDetails() {
         <div style={styles.booksSection}>
           {shelf.books.length > 0 && (
             <div style={styles.controlsRow}>
-              <span style={styles.booksCount}>{shelf.books.length} {shelf.books.length === 1 ? 'Book' : 'Books'}</span>
-              <div style={styles.toggleGroup} className="glass-panel">
-                <button
-                  style={{
-                    ...styles.toggleBtn,
-                    ...(viewMode === 'grid' ? styles.toggleBtnActive : {})
-                  }}
-                  onClick={() => {
-                    setViewMode('grid');
-                    localStorage.setItem('bookbinder_view_mode', 'grid');
-                  }}
-                  title="Grid View"
-                >
-                  <LayoutGrid size={16} />
-                </button>
-                <button
-                  style={{
-                    ...styles.toggleBtn,
-                    ...(viewMode === 'list' ? styles.toggleBtnActive : {})
-                  }}
-                  onClick={() => {
-                    setViewMode('list');
-                    localStorage.setItem('bookbinder_view_mode', 'list');
-                  }}
-                  title="List View"
-                >
-                  <List size={16} />
-                </button>
+              <div style={styles.searchFilterWrapper}>
+                <Search size={16} style={styles.searchIcon} />
+                <input
+                  type="text"
+                  placeholder="Filter by title, author, location..."
+                  value={bookSearchQuery}
+                  onChange={(e) => setBookSearchQuery(e.target.value)}
+                  style={styles.searchFilterInput}
+                />
+                {bookSearchQuery && (
+                  <button 
+                    style={styles.clearSearchBtn} 
+                    onClick={() => setBookSearchQuery('')}
+                    title="Clear filter"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <div style={styles.rightControls}>
+                <span style={styles.booksCount}>
+                  {bookSearchQuery.trim() !== ''
+                    ? `Showing ${filteredBooks.length} of ${shelf.books.length}`
+                    : `${shelf.books.length} ${shelf.books.length === 1 ? 'Book' : 'Books'}`}
+                </span>
+                
+                <div style={styles.toggleGroup} className="glass-panel">
+                  <button
+                    style={{
+                      ...styles.toggleBtn,
+                      ...(viewMode === 'grid' ? styles.toggleBtnActive : {})
+                    }}
+                    onClick={() => {
+                      setViewMode('grid');
+                      localStorage.setItem('bookbinder_view_mode', 'grid');
+                    }}
+                    title="Grid View"
+                  >
+                    <LayoutGrid size={16} />
+                  </button>
+                  <button
+                    style={{
+                      ...styles.toggleBtn,
+                      ...(viewMode === 'list' ? styles.toggleBtnActive : {})
+                    }}
+                    onClick={() => {
+                      setViewMode('list');
+                      localStorage.setItem('bookbinder_view_mode', 'list');
+                    }}
+                    title="List View"
+                  >
+                    <List size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -867,9 +907,18 @@ export default function BookshelfDetails() {
                 </button>
               )}
             </div>
+          ) : filteredBooks.length === 0 ? (
+            <div style={styles.emptyBooks} className="glass-panel">
+              <Search size={48} style={{ color: 'var(--text-muted)' }} />
+              <h3>No Matches Found</h3>
+              <p>No books in this library shelf match your filter criteria: "{bookSearchQuery}"</p>
+              <button className="btn btn-secondary" onClick={() => setBookSearchQuery('')}>
+                <span>Clear Search Filter</span>
+              </button>
+            </div>
           ) : viewMode === 'grid' ? (
             <div style={styles.booksGrid}>
-              {shelf.books.map((b) => (
+              {filteredBooks.map((b) => (
                 <div key={b.mapping_id} style={styles.bookCard} className="glass-panel">
                   {/* Book Cover Container */}
                   <div style={styles.coverWrapper}>
@@ -964,7 +1013,7 @@ export default function BookshelfDetails() {
             </div>
           ) : (
             <div style={styles.booksList}>
-              {shelf.books.map((b) => (
+              {filteredBooks.map((b) => (
                 <div key={b.mapping_id} style={styles.listRow} className="glass-panel">
                   {/* Row cover thumbnail */}
                   <div style={styles.rowCoverWrapper}>
@@ -1965,5 +2014,47 @@ const styles = {
     gap: '8px',
     alignItems: 'center',
     flexShrink: 0,
+  },
+  searchFilterWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    position: 'relative',
+    backgroundColor: 'var(--bg-glass)',
+    border: '1px solid var(--border-glass)',
+    borderRadius: 'var(--radius-sm)',
+    padding: '0 12px',
+    height: '38px',
+    width: '100%',
+    maxWidth: '300px',
+  },
+  searchFilterInput: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--text-primary)',
+    fontSize: '0.85rem',
+    marginLeft: '8px',
+    width: '100%',
+    outline: 'none',
+  },
+  searchIcon: {
+    color: 'var(--text-secondary)',
+    flexShrink: 0,
+  },
+  clearSearchBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--text-muted)',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '50%',
+    transition: 'var(--transition-smooth)',
+  },
+  rightControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
   },
 };
