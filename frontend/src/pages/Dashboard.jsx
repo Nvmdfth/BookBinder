@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Library, FolderPlus, Compass, Users, Plus, X, BookOpen } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Library, FolderPlus, Compass, Users, Plus, X, BookOpen, Sparkles, RefreshCw, AlertTriangle, Book } from 'lucide-react';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [shelves, setShelves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,6 +13,42 @@ export default function Dashboard() {
   const [newShelfName, setNewShelfName] = useState('');
   const [newShelfDesc, setNewShelfDesc] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+
+  // Book Roulette Modal State (Req v1.4)
+  const [isRouletteModalOpen, setIsRouletteModalOpen] = useState(false);
+  const [rouletteBook, setRouletteBook] = useState(null);
+  const [rouletteLoading, setRouletteLoading] = useState(false);
+  const [rouletteError, setRouletteError] = useState(null);
+
+  const fetchRouletteBook = async () => {
+    setRouletteLoading(true);
+    setRouletteError(null);
+    setRouletteBook(null);
+    try {
+      const res = await fetch('/api/books/roulette');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to select a random book.');
+      }
+      setRouletteBook(data);
+    } catch (err) {
+      console.error('Roulette fetch error:', err);
+      setRouletteError(err.message || 'Failed to fetch selection.');
+    } finally {
+      setRouletteLoading(false);
+    }
+  };
+
+  const handleOpenRoulette = () => {
+    setIsRouletteModalOpen(true);
+    fetchRouletteBook();
+  };
+
+  const handleCloseRoulette = () => {
+    setIsRouletteModalOpen(false);
+    setRouletteBook(null);
+    setRouletteError(null);
+  };
 
   const fetchShelves = async () => {
     try {
@@ -80,10 +117,17 @@ export default function Dashboard() {
           <p style={styles.welcomeSub}>Catalog, sort, and collaborate on home physical inventory.</p>
         </div>
         
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-          <FolderPlus size={20} />
-          <span>New Bookshelf</span>
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button className="btn btn-secondary" onClick={handleOpenRoulette} style={styles.rouletteHeaderBtn}>
+            <Sparkles size={18} style={{ color: 'var(--accent-color)', marginRight: '6px' }} />
+            <span>Book Roulette</span>
+          </button>
+          
+          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+            <FolderPlus size={20} />
+            <span>New Bookshelf</span>
+          </button>
+        </div>
       </header>
 
       {error && <div className="error-shake" style={styles.errorText}>{error}</div>}
@@ -211,6 +255,90 @@ export default function Dashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* 🎰 Book Roulette Modal Overlay */}
+      {isRouletteModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.rouletteModalCard} className="glass-panel">
+            <div style={{ ...styles.modalHeader, width: '100%' }}>
+              <h3 style={styles.modalTitle}>
+                <Sparkles size={20} style={{ color: 'var(--accent-color)', verticalAlign: 'middle', marginRight: '8px' }} />
+                <span>Book Roulette Selection</span>
+              </h3>
+              <button style={styles.closeModalBtn} onClick={handleCloseRoulette} disabled={rouletteLoading}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {rouletteLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 0', gap: '12px' }}>
+                <RefreshCw size={36} className="spin" style={{ color: 'var(--accent-color)' }} />
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '600' }}>Choosing your next read...</span>
+              </div>
+            )}
+
+            {rouletteError && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0', gap: '12px', textAlign: 'center' }}>
+                <AlertTriangle size={36} style={{ color: 'var(--danger-color)' }} />
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: '700' }}>{rouletteError}</span>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={handleCloseRoulette}
+                  style={{ height: '36px', fontSize: '0.8rem', marginTop: '12px' }}
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {!rouletteLoading && rouletteBook && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', width: '100%' }}>
+                {rouletteBook.cover_image_url ? (
+                  <img 
+                    src={rouletteBook.cover_image_url} 
+                    alt="" 
+                    style={styles.rouletteCover} 
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                ) : null}
+                <div style={{ ...styles.rouletteCoverFallback, display: rouletteBook.cover_image_url ? 'none' : 'flex' }}>
+                  <Book size={32} />
+                </div>
+
+                <div style={styles.rouletteBookTitle}>{rouletteBook.title}</div>
+                <div style={styles.rouletteBookAuthor}>by {rouletteBook.author || 'Unknown Author'}</div>
+                
+                <span style={styles.rouletteShelfContext}>
+                  📍 Located on shelf: <strong>{rouletteBook.bookshelf_name}</strong>
+                </span>
+
+                <div style={{ ...styles.modalActions, marginTop: '20px', gap: '16px', justifyContent: 'center', width: '100%' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={fetchRouletteBook}
+                    style={{ height: '40px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <RefreshCw size={16} />
+                    <span>Roll Again</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      handleCloseRoulette();
+                      navigate(`/bookshelves/${rouletteBook.bookshelf_id}`);
+                    }}
+                    style={{ height: '40px' }}
+                  >
+                    <span>Read Now</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -397,5 +525,68 @@ const styles = {
     justifyContent: 'flex-end',
     gap: '12px',
     marginTop: '12px',
+  },
+  rouletteHeaderBtn: {
+    height: '42px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0 16px',
+    fontSize: '0.9rem',
+    fontWeight: '600',
+  },
+  rouletteModalCard: {
+    width: '100%',
+    maxWidth: '460px',
+    padding: '30px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    boxShadow: 'var(--shadow-lg)',
+    borderRadius: 'var(--radius-lg)',
+    textAlign: 'center',
+    alignItems: 'center',
+  },
+  rouletteCover: {
+    height: '180px',
+    borderRadius: 'var(--radius-sm)',
+    boxShadow: '0 6px 16px rgba(0,0,0,0.5)',
+    objectFit: 'cover',
+    marginBottom: '8px',
+  },
+  rouletteCoverFallback: {
+    height: '180px',
+    width: '120px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--bg-primary)',
+    border: '1px solid var(--border-glass)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 6px 16px rgba(0,0,0,0.5)',
+    marginBottom: '8px',
+    color: 'var(--text-muted)',
+  },
+  rouletteBookTitle: {
+    fontSize: '1.2rem',
+    fontWeight: '800',
+    lineHeight: '1.3',
+    color: 'var(--text-primary)',
+    maxWidth: '360px',
+  },
+  rouletteBookAuthor: {
+    fontSize: '0.9rem',
+    color: 'var(--text-secondary)',
+    fontWeight: '600',
+    marginTop: '4px',
+  },
+  rouletteShelfContext: {
+    fontSize: '0.8rem',
+    color: 'var(--accent-color)',
+    backgroundColor: 'var(--accent-light)',
+    padding: '6px 14px',
+    borderRadius: '16px',
+    fontWeight: '700',
+    marginTop: '8px',
+    display: 'inline-block',
   },
 };

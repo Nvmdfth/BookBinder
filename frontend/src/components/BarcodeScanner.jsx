@@ -9,6 +9,11 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   const [isVibratingSupport, setIsVibratingSupport] = useState(true);
   const [isPulse, setIsPulse] = useState(false);
   
+  // v1.4 Scanner Lookup Confirmation states
+  const [lookupDetails, setLookupDetails] = useState(null);
+  const [isLookupLoading, setIsLookupLoading] = useState(false);
+  const [scanError, setScanError] = useState(null);
+  
   const qrCodeRef = useRef(null);
   const scannerContainerId = 'bookbinder-scanner-view';
 
@@ -61,6 +66,51 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
     setTimeout(() => setIsPulse(false), 800);
   };
 
+  const handleScanLookup = async (isbn) => {
+    setIsLookupLoading(true);
+    setScanError(null);
+    setLookupDetails(null);
+    
+    try {
+      const res = await fetch(`/api/books/lookup/${isbn}`);
+      const data = await res.json();
+      
+      if (res.status === 404 && data.fallbackToManual) {
+        // Stop scanning completely and fallback to parent manual redirection tab
+        await stopScanner();
+        onScanSuccess(isbn);
+      } else if (!res.ok) {
+        throw new Error(data.error || 'Metadata lookup failed.');
+      } else {
+        setLookupDetails(data);
+      }
+    } catch (err) {
+      console.error('Scan lookup failed:', err);
+      setScanError(err.message || 'Failed to query book metadata.');
+    } finally {
+      setIsLookupLoading(false);
+    }
+  };
+
+  const handleConfirmYes = () => {
+    if (lookupDetails) {
+      onScanSuccess(lookupDetails.isbn);
+    }
+    handleConfirmDismiss();
+  };
+
+  const handleConfirmDismiss = () => {
+    setLookupDetails(null);
+    setScanError(null);
+    if (qrCodeRef.current) {
+      try {
+        qrCodeRef.current.resume();
+      } catch (e) {
+        console.warn('Failed to resume scanner:', e);
+      }
+    }
+  };
+
   const startScanner = async () => {
     setErrorMessage(null);
     
@@ -98,9 +148,17 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
           { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
           config,
           (decodedText) => {
+            if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+              if (qrCodeRef.current.isPaused()) return;
+              try {
+                qrCodeRef.current.pause(true);
+              } catch (e) {
+                console.warn('Scan pause error:', e);
+              }
+            }
             // ISBN found!
             triggerSuccessSignals();
-            onScanSuccess(decodedText);
+            handleScanLookup(decodedText);
           },
           (error) => {
             if (onScanError) onScanError(error);
@@ -113,8 +171,16 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
           {}, // Empty constraints allows browser to fallback to default webcam
           config,
           (decodedText) => {
+            if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+              if (qrCodeRef.current.isPaused()) return;
+              try {
+                qrCodeRef.current.pause(true);
+              } catch (e) {
+                console.warn('Scan pause error:', e);
+              }
+            }
             triggerSuccessSignals();
-            onScanSuccess(decodedText);
+            handleScanLookup(decodedText);
           },
           (error) => {
             if (onScanError) onScanError(error);
@@ -209,6 +275,60 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
             <div style={styles.scanningLine}></div>
             <div style={styles.guideText}>Align Barcode Here</div>
           </div>
+
+          {/* v1.4 Loading Overlay */}
+          {isLookupLoading && (
+            <div style={styles.confirmationOverlay}>
+              <RefreshCw size={36} className="spin" style={{ color: 'var(--accent-color)' }} />
+              <p style={{ fontWeight: '600', fontSize: '0.9rem', marginTop: '8px' }}>Fetching book details...</p>
+            </div>
+          )}
+
+          {/* v1.4 Confirmation Overlay */}
+          {lookupDetails && (
+            <div style={styles.confirmationOverlay}>
+              <h4 style={{ fontWeight: '800', fontSize: '1rem', color: 'var(--accent-color)', marginBottom: '8px' }}>
+                Is this the correct book?
+              </h4>
+              
+              {lookupDetails.cover_image_url ? (
+                <img 
+                  src={lookupDetails.cover_image_url} 
+                  alt="" 
+                  style={styles.confirmCover} 
+                  onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                />
+              ) : null}
+              <div style={{ ...styles.confirmCoverFallback, display: lookupDetails.cover_image_url ? 'none' : 'flex' }}>
+                <Camera size={24} style={{ color: 'var(--text-muted)' }} />
+              </div>
+
+              <div style={{ marginTop: '6px' }}>
+                <div style={styles.confirmTitle} title={lookupDetails.title}>{lookupDetails.title}</div>
+                <div style={styles.confirmAuthor}>by {lookupDetails.author || 'Unknown Author'}</div>
+              </div>
+
+              <div style={styles.confirmButtons}>
+                <button className="btn btn-danger" style={{ height: '36px', padding: '0 16px', fontSize: '0.8rem' }} onClick={handleConfirmDismiss}>
+                  No, Skip
+                </button>
+                <button className="btn btn-success" style={{ height: '36px', padding: '0 16px', fontSize: '0.8rem', backgroundColor: 'var(--success-color)', border: 'none', color: '#ffffff' }} onClick={handleConfirmYes}>
+                  Yes, Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* v1.4 Scan Error Overlay */}
+          {scanError && (
+            <div style={styles.confirmationOverlay}>
+              <AlertCircle size={36} style={{ color: 'var(--danger-color)' }} />
+              <p style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--danger-color)', maxWidth: '240px', marginTop: '8px' }}>{scanError}</p>
+              <button className="btn btn-secondary" style={{ height: '36px', padding: '0 16px', fontSize: '0.85rem', marginTop: '12px' }} onClick={handleConfirmDismiss}>
+                Scan Again
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -333,5 +453,63 @@ const styles = {
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
     textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+  },
+  confirmationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    backdropFilter: 'blur(8px)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '20px',
+    color: '#ffffff',
+    zIndex: 10,
+    textAlign: 'center',
+    gap: '12px',
+  },
+  confirmCover: {
+    height: '110px',
+    borderRadius: '4px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+    objectFit: 'cover',
+  },
+  confirmCoverFallback: {
+    height: '110px',
+    width: '75px',
+    borderRadius: '4px',
+    backgroundColor: 'var(--bg-glass)',
+    border: '1px solid var(--border-glass)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+  },
+  confirmTitle: {
+    fontSize: '0.95rem',
+    fontWeight: '750',
+    lineHeight: '1.3',
+    maxWidth: '240px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+  },
+  confirmAuthor: {
+    fontSize: '0.8rem',
+    color: 'var(--text-muted)',
+    fontWeight: '600',
+  },
+  confirmButtons: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '6px',
+    width: '100%',
+    justifyContent: 'center',
   },
 };

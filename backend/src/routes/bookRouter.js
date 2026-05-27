@@ -639,4 +639,107 @@ router.put('/:bookId', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/books/lookup/:isbn - Perform metadata lookup without bookshelf mapping (cached check -> API lookup)
+ */
+router.get('/lookup/:isbn', async (req, res) => {
+  const isbn = cleanISBN(req.params.isbn);
+
+  if (!isbn || isbn.length < 9) {
+    return res.status(400).json({ error: 'A valid ISBN parameter is required.' });
+  }
+
+  try {
+    // 1. Check local catalog cache first
+    let bookRes = await query('SELECT * FROM books WHERE isbn = $1', [isbn]);
+    let book = null;
+
+    if (bookRes.rows.length > 0) {
+      book = bookRes.rows[0];
+      console.log(`💾 Lookup cache hit: retrieved "${book.title}"`);
+    } else {
+      // 2. Lookup externally
+      try {
+        const externalData = await withTimeout(
+          queryExternalISBN(isbn),
+          12000,
+          'External ISBN lookup timed out (12s limit)'
+        );
+
+        if (externalData) {
+          // Insert into global catalog books table to cache it
+          const insertRes = await query(
+            `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING *`,
+            [
+              externalData.isbn,
+              externalData.title,
+              externalData.author,
+              externalData.publisher,
+              externalData.cover_image_url,
+              externalData.page_count,
+              externalData.publication_date,
+            ]
+          );
+          book = insertRes.rows[0];
+        }
+      } catch (timeoutErr) {
+        console.error('⚠️ ISBN Lookup query timeout:', timeoutErr.message);
+        return res.status(404).json({
+          fallbackToManual: true,
+          isbn: isbn,
+          error: 'External search lookup timed out.',
+        });
+      }
+    }
+
+    if (!book) {
+      return res.status(404).json({
+        fallbackToManual: true,
+        isbn: isbn,
+        error: 'Book details not found.',
+      });
+    }
+
+    return res.json(book);
+
+  } catch (error) {
+    console.error('ISBN Lookup Router Error:', error);
+    return res.status(500).json({ error: 'Internal server error during metadata lookup.' });
+  }
+});
+
+/**
+ * GET /api/books/roulette - Select a random unread book from the user's bookshelves
+ */
+router.get('/roulette', async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const randomBookRes = await query(
+      `SELECT ub.id AS mapping_id, b.title, b.author, b.cover_image_url, bs.name AS bookshelf_name, bs.id AS bookshelf_id
+       FROM user_books ub
+       JOIN books b ON ub.book_id = b.id
+       JOIN bookshelves bs ON ub.bookshelf_id = bs.id
+       LEFT JOIN shelf_shares ss ON bs.id = ss.bookshelf_id AND ss.shared_with_user_id = $1
+       WHERE (bs.user_id = $1 OR ss.shared_with_user_id = $1)
+         AND (ub.is_read = FALSE OR ub.is_read IS NULL)
+       ORDER BY RANDOM()
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (randomBookRes.rows.length === 0) {
+      return res.status(404).json({ error: 'No unread books found in your bookshelves.' });
+    }
+
+    return res.json(randomBookRes.rows[0]);
+
+  } catch (error) {
+    console.error('Book Roulette Router Error:', error);
+    return res.status(500).json({ error: 'Internal server error running Book Roulette.' });
+  }
+});
+
 module.exports = router;
