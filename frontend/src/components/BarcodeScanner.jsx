@@ -127,75 +127,97 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
       console.warn('Audio pre-unlock failed:', e);
     }
 
-    try {
-      const html5Qrcode = new Html5Qrcode(scannerContainerId);
-      qrCodeRef.current = html5Qrcode;
+    setIsActive(true);
+  };
 
-      const config = {
-        fps: 15,
-        qrbox: (width, height) => {
-          // Responsive target frame
-          const size = Math.min(width, height) * 0.7;
-          return { width: size, height: size * 0.5 }; // Horizontal barcode size ratio
-        },
-        aspectRatio: 1.0,
-      };
+  useEffect(() => {
+    let html5Qrcode = null;
 
-      setIsActive(true);
+    const initScanner = async () => {
+      if (!isActive) return;
 
       try {
-        await html5Qrcode.start(
-          { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
-          config,
-          (decodedText) => {
-            if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-              if (qrCodeRef.current.isPaused()) return;
-              try {
-                qrCodeRef.current.pause(true);
-              } catch (e) {
-                console.warn('Scan pause error:', e);
-              }
-            }
-            // ISBN found!
-            triggerSuccessSignals();
-            handleScanLookup(decodedText);
+        html5Qrcode = new Html5Qrcode(scannerContainerId);
+        qrCodeRef.current = html5Qrcode;
+
+        const config = {
+          fps: 15,
+          qrbox: (width, height) => {
+            // Responsive target frame
+            const size = Math.min(width, height) * 0.7;
+            return { width: size, height: size * 0.5 }; // Horizontal barcode size ratio
           },
-          (error) => {
-            if (onScanError) onScanError(error);
-          }
-        );
-      } catch (envErr) {
-        console.warn('Rear camera environment constraint failed, trying default camera:', envErr);
-        // Fallback to default webcam constraints (works on desktops/laptops with single webcams)
-        await html5Qrcode.start(
-          {}, // Empty constraints allows browser to fallback to default webcam
-          config,
-          (decodedText) => {
-            if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-              if (qrCodeRef.current.isPaused()) return;
-              try {
-                qrCodeRef.current.pause(true);
-              } catch (e) {
-                console.warn('Scan pause error:', e);
+          aspectRatio: 1.0,
+        };
+
+        try {
+          await html5Qrcode.start(
+            { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
+            config,
+            (decodedText) => {
+              if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+                if (qrCodeRef.current.isPaused()) return;
+                try {
+                  qrCodeRef.current.pause(true);
+                } catch (e) {
+                  console.warn('Scan pause error:', e);
+                }
               }
+              // ISBN found!
+              triggerSuccessSignals();
+              handleScanLookup(decodedText);
+            },
+            (error) => {
+              if (onScanError) onScanError(error);
             }
-            triggerSuccessSignals();
-            handleScanLookup(decodedText);
-          },
-          (error) => {
-            if (onScanError) onScanError(error);
-          }
+          );
+        } catch (envErr) {
+          console.warn('Rear camera environment constraint failed, trying default camera:', envErr);
+          // Fallback to default webcam constraints (works on desktops/laptops with single webcams)
+          await html5Qrcode.start(
+            {}, // Empty constraints allows browser to fallback to default webcam
+            config,
+            (decodedText) => {
+              if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+                if (qrCodeRef.current.isPaused()) return;
+                try {
+                  qrCodeRef.current.pause(true);
+                } catch (e) {
+                  console.warn('Scan pause error:', e);
+                }
+              }
+              triggerSuccessSignals();
+              handleScanLookup(decodedText);
+            },
+            (error) => {
+              if (onScanError) onScanError(error);
+            }
+          );
+        }
+
+      } catch (err) {
+        console.error('Camera starting failed:', err);
+        setIsActive(false);
+        setErrorMessage(
+          'Unable to access the camera stream. Please ensure camera permissions are active and HTTPS secure context requirements are satisfied.'
         );
       }
+    };
 
-    } catch (err) {
-      console.error('Camera starting failed:', err);
-      setIsActive(false);
-      setErrorMessage(
-        'Unable to access the camera stream. Please ensure camera permissions are active and HTTPS secure context requirements are satisfied.'
-      );
+    if (isActive) {
+      // Small timeout to ensure browser has painted the element and offsetWidth/offsetHeight are positive
+      const timer = setTimeout(() => {
+        initScanner();
+      }, 80);
+      
+      return () => {
+        clearTimeout(timer);
+        if (html5Qrcode && html5Qrcode.isScanning) {
+          html5Qrcode.stop().catch(console.error);
+        }
+      };
     }
-  };
+  }, [isActive]);
 
   const stopScanner = async () => {
     if (qrCodeRef.current && qrCodeRef.current.isScanning) {
