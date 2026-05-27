@@ -4,7 +4,7 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import { 
   Book, MapPin, Notebook, Plus, Pencil, Trash2, Users, X, Share2, 
   Settings, AlertTriangle, ArrowLeft, Camera, FileText, CheckCircle,
-  Search, Bookmark, Check
+  Search, Bookmark, Check, LayoutGrid, List
 } from 'lucide-react';
 
 export default function BookshelfDetails() {
@@ -18,6 +18,11 @@ export default function BookshelfDetails() {
   // Scanning / Creation view controls
   const [activeTab, setActiveTab] = useState('list'); // 'list', 'scan', 'manual'
   const [prefilledIsbn, setPrefilledIsbn] = useState('');
+  
+  // v1.5 Grid/List View and Reassignment States
+  const [viewMode, setViewMode] = useState(localStorage.getItem('bookbinder_view_mode') || 'grid');
+  const [writeableShelves, setWriteableShelves] = useState([]);
+  const [targetBookshelfId, setTargetBookshelfId] = useState('');
   const [scanMessage, setScanMessage] = useState(null);
   
   // Modal controllers
@@ -160,6 +165,22 @@ export default function BookshelfDetails() {
     }
   };
 
+  const fetchWriteableShelves = async () => {
+    try {
+      const res = await fetch('/api/bookshelves');
+      if (res.ok) {
+        const data = await res.json();
+        // Filter to owner/collaborator role and exclude current shelf ID
+        const filtered = data.filter(
+          (s) => (s.role === 'owner' || s.role === 'collaborator') && s.id !== parseInt(id, 10)
+        );
+        setWriteableShelves(filtered);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch writeable shelves list:', err);
+    }
+  };
+
   const fetchShareList = async () => {
     try {
       const res = await fetch(`/api/shares/${id}`);
@@ -174,6 +195,7 @@ export default function BookshelfDetails() {
 
   useEffect(() => {
     fetchShelfDetails();
+    fetchWriteableShelves();
   }, [id]);
 
   useEffect(() => {
@@ -316,23 +338,33 @@ export default function BookshelfDetails() {
         body: JSON.stringify({
           physicalLocation: editLocation,
           notes: editNotes,
+          targetBookshelfId: targetBookshelfId || null,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save annotations.');
 
-      // Update UI list state
-      setShelf((prev) => ({
-        ...prev,
-        books: prev.books.map((b) =>
-          b.mapping_id === editingMapping.mapping_id
-            ? { ...b, physical_location: data.mapping.physical_location, notes: data.mapping.notes }
-            : b
-        ),
-      }));
+      // Update UI list state: if moved, filter it out from the current shelf rendering, else update inline
+      if (targetBookshelfId && parseInt(targetBookshelfId, 10) !== parseInt(id, 10)) {
+        setShelf((prev) => ({
+          ...prev,
+          books: prev.books.filter((b) => b.mapping_id !== editingMapping.mapping_id),
+        }));
+        alert(`Successfully reassigned to the selected bookshelf!`);
+      } else {
+        setShelf((prev) => ({
+          ...prev,
+          books: prev.books.map((b) =>
+            b.mapping_id === editingMapping.mapping_id
+              ? { ...b, physical_location: data.mapping.physical_location, notes: data.mapping.notes }
+              : b
+          ),
+        }));
+      }
 
       setEditingMapping(null);
+      setTargetBookshelfId('');
     } catch (err) {
       alert(err.message);
     } finally {
@@ -789,6 +821,40 @@ export default function BookshelfDetails() {
       {/* 📚 Books List Tab (Always visible, adjusts mutations based on accessRole) */}
       {activeTab === 'list' && (
         <div style={styles.booksSection}>
+          {shelf.books.length > 0 && (
+            <div style={styles.controlsRow}>
+              <span style={styles.booksCount}>{shelf.books.length} {shelf.books.length === 1 ? 'Book' : 'Books'}</span>
+              <div style={styles.toggleGroup} className="glass-panel">
+                <button
+                  style={{
+                    ...styles.toggleBtn,
+                    ...(viewMode === 'grid' ? styles.toggleBtnActive : {})
+                  }}
+                  onClick={() => {
+                    setViewMode('grid');
+                    localStorage.setItem('bookbinder_view_mode', 'grid');
+                  }}
+                  title="Grid View"
+                >
+                  <LayoutGrid size={16} />
+                </button>
+                <button
+                  style={{
+                    ...styles.toggleBtn,
+                    ...(viewMode === 'list' ? styles.toggleBtnActive : {})
+                  }}
+                  onClick={() => {
+                    setViewMode('list');
+                    localStorage.setItem('bookbinder_view_mode', 'list');
+                  }}
+                  title="List View"
+                >
+                  <List size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {shelf.books.length === 0 ? (
             <div style={styles.emptyBooks} className="glass-panel">
               <Book size={48} style={{ color: 'var(--text-muted)' }} />
@@ -801,7 +867,7 @@ export default function BookshelfDetails() {
                 </button>
               )}
             </div>
-          ) : (
+          ) : viewMode === 'grid' ? (
             <div style={styles.booksGrid}>
               {shelf.books.map((b) => (
                 <div key={b.mapping_id} style={styles.bookCard} className="glass-panel">
@@ -877,6 +943,7 @@ export default function BookshelfDetails() {
                             setEditingMapping(b);
                             setEditLocation(b.physical_location || '');
                             setEditNotes(b.notes || '');
+                            setTargetBookshelfId('');
                           }}
                           title="Edit location & notes"
                         >
@@ -892,6 +959,105 @@ export default function BookshelfDetails() {
                       </div>
                     )}
                   </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={styles.booksList}>
+              {shelf.books.map((b) => (
+                <div key={b.mapping_id} style={styles.listRow} className="glass-panel">
+                  {/* Row cover thumbnail */}
+                  <div style={styles.rowCoverWrapper}>
+                    {b.cover_image_url ? (
+                      <img 
+                        src={b.cover_image_url} 
+                        alt="" 
+                        style={styles.rowCoverImg}
+                        onError={handleImageError} 
+                      />
+                    ) : null}
+                    
+                    <div style={{
+                      ...styles.rowCoverFallback,
+                      display: b.cover_image_url ? 'none' : 'flex'
+                    }}>
+                      <Book size={18} />
+                    </div>
+                  </div>
+
+                  {/* Row content details */}
+                  <div style={styles.rowContent}>
+                    <div style={styles.rowMainInfo}>
+                      <div style={styles.rowTitleAuthorStack}>
+                        <h3 style={styles.rowBookTitle} title={b.title}>{b.title}</h3>
+                        <span style={styles.rowBookAuthor}>{b.author}</span>
+                      </div>
+                      
+                      {/* Publisher / Date pills */}
+                      <div style={styles.rowMetaRow}>
+                        {b.publisher && <span style={styles.metaPill} title={b.publisher}>{b.publisher}</span>}
+                        {b.page_count && <span style={styles.metaPill}>{b.page_count} p.</span>}
+                      </div>
+                    </div>
+
+                    {/* Location and Notes previews */}
+                    <div style={styles.rowAnnotations}>
+                      {b.physical_location && (
+                        <div style={styles.locationBlock}>
+                          <MapPin size={12} style={{ color: 'var(--accent-color)' }} />
+                          <span style={styles.locationText} title={b.physical_location}>{b.physical_location}</span>
+                        </div>
+                      )}
+                      {b.notes && (
+                        <div style={styles.rowNotesBlock} title={b.notes}>
+                          <Notebook size={12} style={{ color: 'var(--text-muted)' }} />
+                          <span style={styles.rowNotesText}>{b.notes}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Read/Unread Toggle Badge */}
+                  <div style={styles.rowStatus}>
+                    <button
+                      style={{
+                        ...styles.readStatusBadge,
+                        ...(b.is_read ? styles.readBadgeActive : styles.readBadgeInactive),
+                        cursor: isCollaborator ? 'pointer' : 'default',
+                      }}
+                      onClick={() => isCollaborator && handleToggleReadStatus(b)}
+                      title={isCollaborator ? `Mark as ${b.is_read ? 'unread' : 'read'}` : `Book is ${b.is_read ? 'read' : 'unread'}`}
+                      disabled={!isCollaborator}
+                    >
+                      {b.is_read ? <CheckCircle size={10} style={{ color: 'var(--success-color)' }} /> : <Bookmark size={10} />}
+                      <span>{b.is_read ? 'Read' : 'Unread'}</span>
+                    </button>
+                  </div>
+
+                  {/* Actions */}
+                  {isCollaborator && (
+                    <div style={styles.rowActions}>
+                      <button 
+                        style={styles.cardActionBtn} 
+                        onClick={() => {
+                          setEditingMapping(b);
+                          setEditLocation(b.physical_location || '');
+                          setEditNotes(b.notes || '');
+                          setTargetBookshelfId('');
+                        }}
+                        title="Edit location & notes"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button 
+                        style={{ ...styles.cardActionBtn, color: 'var(--danger-color)' }} 
+                        onClick={() => handleDeleteMapping(b.mapping_id)}
+                        title="Remove book from shelf"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -927,6 +1093,24 @@ export default function BookshelfDetails() {
                   placeholder="e.g. Oak Case B, Shelf 3"
                   disabled={actionLoading}
                 />
+              </div>
+
+              {/* 🔄 Cross-shelf reassignment (v1.5) */}
+              <div className="form-group">
+                <label className="form-label">Move to Bookshelf</label>
+                <select 
+                  className="form-input"
+                  value={targetBookshelfId}
+                  onChange={(e) => setTargetBookshelfId(e.target.value)}
+                  disabled={actionLoading}
+                >
+                  <option value="">-- Keep on Current Shelf --</option>
+                  {writeableShelves.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.role})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
@@ -1622,5 +1806,164 @@ const styles = {
     height: '116px',
     width: '100%',
     borderRadius: 'var(--radius-sm)',
+  },
+  controlsRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+    width: '100%',
+  },
+  booksCount: {
+    fontSize: '0.9rem',
+    fontWeight: '700',
+    color: 'var(--text-secondary)',
+  },
+  toggleGroup: {
+    display: 'flex',
+    padding: '3px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--border-glass)',
+    backgroundColor: 'var(--bg-glass)',
+    gap: '2px',
+  },
+  toggleBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    padding: '6px 10px',
+    borderRadius: 'var(--radius-xs)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'var(--transition-smooth)',
+  },
+  toggleBtnActive: {
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--accent-color)',
+    boxShadow: 'var(--shadow-sm)',
+  },
+  booksList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    width: '100%',
+  },
+  listRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 'var(--radius-md)',
+    padding: '12px 16px',
+    border: '1px solid var(--border-glass)',
+    backgroundColor: 'var(--bg-glass)',
+    gap: '16px',
+    transition: 'var(--transition-smooth)',
+  },
+  rowCoverWrapper: {
+    width: '35px',
+    height: '50px',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: '4px',
+    border: '1px solid var(--border-glass)',
+    flexShrink: 0,
+  },
+  rowCoverImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  rowCoverFallback: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--text-muted)',
+    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--border-glass) 100%)',
+  },
+  rowContent: {
+    display: 'flex',
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '16px',
+    minWidth: 0,
+    flexWrap: 'wrap',
+  },
+  rowMainInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: '1 1 200px',
+    minWidth: 0,
+  },
+  rowTitleAuthorStack: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  rowBookTitle: {
+    fontSize: '0.95rem',
+    fontWeight: '750',
+    color: 'var(--text-primary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  rowBookAuthor: {
+    fontSize: '0.8rem',
+    color: 'var(--text-secondary)',
+    fontWeight: '600',
+  },
+  rowMetaRow: {
+    display: 'flex',
+    gap: '6px',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  rowAnnotations: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: '1 1 250px',
+    minWidth: 0,
+  },
+  rowNotesBlock: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 8px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--bg-primary)',
+    border: '1px solid var(--border-glass)',
+    width: 'fit-content',
+    maxWidth: '100%',
+  },
+  rowNotesText: {
+    fontSize: '0.75rem',
+    color: 'var(--text-secondary)',
+    fontStyle: 'italic',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  rowStatus: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rowActions: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    flexShrink: 0,
   },
 };

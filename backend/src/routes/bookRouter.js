@@ -496,7 +496,7 @@ router.post('/manual', async (req, res) => {
  */
 router.put('/mapping/:mappingId', async (req, res) => {
   const mappingId = parseInt(req.params.mappingId, 10);
-  const { physicalLocation, notes, isRead } = req.body;
+  const { physicalLocation, notes, isRead, targetBookshelfId } = req.body;
 
   if (isNaN(mappingId)) {
     return res.status(400).json({ error: 'Invalid mapping ID.' });
@@ -504,12 +504,12 @@ router.put('/mapping/:mappingId', async (req, res) => {
 
   try {
     // 1. Resolve bookshelf association to verify RBAC access
-    const mapRes = await query('SELECT bookshelf_id, physical_location, notes, is_read FROM user_books WHERE id = $1', [mappingId]);
+    const mapRes = await query('SELECT bookshelf_id, book_id, physical_location, notes, is_read FROM user_books WHERE id = $1', [mappingId]);
     if (mapRes.rows.length === 0) {
       return res.status(404).json({ error: 'Book bookshelf association not found.' });
     }
 
-    const { bookshelf_id: bookshelfId, physical_location: currentLoc, notes: currentNotes, is_read: currentIsRead } = mapRes.rows[0];
+    const { bookshelf_id: bookshelfId, book_id: bookId, physical_location: currentLoc, notes: currentNotes, is_read: currentIsRead } = mapRes.rows[0];
 
     // 2. Verify access to shelf
     req.params.bookshelfId = bookshelfId;
@@ -519,14 +519,45 @@ router.put('/mapping/:mappingId', async (req, res) => {
           const finalLoc = physicalLocation !== undefined ? (physicalLocation ? physicalLocation.trim() : null) : currentLoc;
           const finalNotes = notes !== undefined ? (notes ? notes.trim() : null) : currentNotes;
           const finalIsRead = isRead !== undefined ? !!isRead : currentIsRead;
+          
+          let finalBookshelfId = bookshelfId;
 
-          // 3. Update annotations & read status (Req 1.2 Read Status)
+          // Cross-Shelf Reassignment Verification (Req 1.5 Reassignment)
+          if (targetBookshelfId && parseInt(targetBookshelfId, 10) !== bookshelfId) {
+            const targetId = parseInt(targetBookshelfId, 10);
+
+            // Verify write access to target shelf (owner/collaborator)
+            const targetAccess = await query(
+              `SELECT 'owner' AS role FROM bookshelves WHERE id = $1 AND user_id = $2
+               UNION ALL
+               SELECT permission AS role FROM shelf_shares WHERE bookshelf_id = $1 AND shared_with_user_id = $2`,
+              [targetId, req.user.id]
+            );
+
+            if (targetAccess.rows.length === 0 || (targetAccess.rows[0].role !== 'owner' && targetAccess.rows[0].role !== 'collaborator')) {
+              return res.status(403).json({ error: 'You do not have write access to the destination target bookshelf.' });
+            }
+
+            // Check if book is already mapped in target shelf to prevent duplicates
+            const dupCheck = await query(
+              'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
+              [targetId, bookId]
+            );
+
+            if (dupCheck.rows.length > 0) {
+              return res.status(409).json({ error: 'This book is already assigned to the destination target bookshelf.' });
+            }
+
+            finalBookshelfId = targetId;
+          }
+
+          // 3. Update annotations, read status, and bookshelf assignments atomically
           const updatedMap = await query(
             `UPDATE user_books 
-             SET physical_location = $1, notes = $2, is_read = $3
-             WHERE id = $4 
+             SET physical_location = $1, notes = $2, is_read = $3, bookshelf_id = $4
+             WHERE id = $5 
              RETURNING id, physical_location, notes, is_read, bookshelf_id, book_id`,
-            [finalLoc, finalNotes, finalIsRead, mappingId]
+            [finalLoc, finalNotes, finalIsRead, finalBookshelfId, mappingId]
           );
 
           return res.json({
