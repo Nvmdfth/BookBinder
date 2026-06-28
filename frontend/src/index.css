@@ -358,3 +358,7 @@ button, input, textarea, select {
   transform: translateY(-1px) scale(0.99);
 }
 
+/* Hide html5-qrcode's auto-generated visual canvas overlay to prevent double/misaligned reticle */
+#bookbinder-scanner-view canvas {
+  display: none !important;
+}
