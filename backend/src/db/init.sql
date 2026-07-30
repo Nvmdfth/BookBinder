@@ -65,13 +65,15 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 
 -- 7. Seed Initial System Settings
+-- DO NOTHING (not DO UPDATE) is required: init.sql re-runs on every boot, so
+-- overwriting here would reset admin-configured switches — notably
+-- allow_open_registration — back to their defaults on each container restart.
 INSERT INTO system_settings (key, value)
-VALUES 
+VALUES
     ('allow_open_registration', 'false'),
     ('enable_google_books', 'true'),
     ('enable_open_library', 'true')
-ON CONFLICT (key) DO UPDATE 
-SET value = EXCLUDED.value;
+ON CONFLICT (key) DO NOTHING;
 
 -- 8. Migration: Add columns to existing databases safely
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE;

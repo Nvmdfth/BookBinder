@@ -6,28 +6,58 @@ const { authenticateToken, JWT_SECRET } = require('../middleware/authMiddleware'
 
 const router = express.Router();
 
+const REGISTRATION_DISABLED_MESSAGE =
+  'Public registration is currently disabled on this instance. Please contact your system administrator for access.';
+
+/**
+ * Resolve the allow_open_registration switch state (Req 4.4.1)
+ */
+async function isOpenRegistrationEnabled() {
+  const settingsRes = await query(
+    "SELECT value FROM system_settings WHERE key = 'allow_open_registration'"
+  );
+  return settingsRes.rows.length > 0 && settingsRes.rows[0].value === 'true';
+}
+
+/**
+ * GET /api/auth/registration-status - Public switch probe (Req 4.4.2)
+ *
+ * Unauthenticated by design: the registration view needs to know whether to render
+ * its inputs or the locked fallback message before any credentials exist.
+ */
+router.get('/registration-status', async (req, res) => {
+  try {
+    const open = await isOpenRegistrationEnabled();
+    return res.json({
+      allowOpenRegistration: open,
+      message: open ? null : REGISTRATION_DISABLED_MESSAGE,
+    });
+  } catch (error) {
+    console.error('Registration Status Route Error:', error);
+    // Fail closed: on error the UI shows the locked fallback rather than a form
+    // that would be rejected by the API guard anyway.
+    return res.status(500).json({
+      allowOpenRegistration: false,
+      error: 'Internal server error resolving registration availability.',
+    });
+  }
+});
+
 /**
  * POST /api/auth/register - User Registration
  */
 router.post('/register', async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password || password.trim().length < 6) {
-    return res.status(400).json({ error: 'Valid email and a password of at least 6 characters are required.' });
-  }
-
   try {
-    // 1. Enforce admin switch check (allow_open_registration)
-    const settingsRes = await query(
-      "SELECT value FROM system_settings WHERE key = 'allow_open_registration'"
-    );
-    
-    const isOpenRegistration = settingsRes.rows.length > 0 && settingsRes.rows[0].value === 'true';
+    // 1. Enforce admin switch check (allow_open_registration) BEFORE payload
+    // validation, so a disabled instance answers 403 regardless of body shape (Req 4.4.4)
+    if (!await isOpenRegistrationEnabled()) {
+      return res.status(403).json({ error: REGISTRATION_DISABLED_MESSAGE });
+    }
 
-    if (!isOpenRegistration) {
-      return res.status(403).json({
-        error: 'Public registration is currently disabled on this instance. Please contact your system administrator for access.'
-      });
+    if (!email || !password || password.trim().length < 6) {
+      return res.status(400).json({ error: 'Valid email and a password of at least 6 characters are required.' });
     }
 
     // 2. Check if user already exists
@@ -138,7 +168,13 @@ router.post('/login', async (req, res) => {
  * POST /api/auth/logout - End Session
  */
 router.post('/logout', (req, res) => {
-  res.clearCookie('token');
+  // Attributes must match those used when the cookie was issued, otherwise
+  // browsers keep the original cookie and the session survives logout.
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
   return res.json({ message: 'Session closed successfully.' });
 });
 

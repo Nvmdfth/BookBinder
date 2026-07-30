@@ -2,6 +2,7 @@ const express = require('express');
 const { query } = require('../db/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const { verifyBookshelfAccess, requireCollaborator } = require('../middleware/shareMiddleware');
+const { cleanISBN, isValidISBN } = require('../utils/isbn');
 
 const router = express.Router();
 
@@ -19,14 +20,6 @@ function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
     }, ms);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
-}
-
-/**
- * Clean ISBN strings from spacing and dashes
- */
-function cleanISBN(isbn) {
-  if (!isbn) return '';
-  return isbn.replace(/[- ]/g, '').toUpperCase().trim();
 }
 
 /**
@@ -265,8 +258,10 @@ router.post('/scan/:isbn', async (req, res, next) => {
   const { bookshelfId, physicalLocation, notes } = req.body;
   const isbn = cleanISBN(req.params.isbn);
 
-  if (!isbn || isbn.length < 9) {
-    return res.status(400).json({ error: 'A valid ISBN parameter is required.' });
+  // Reject non-ISBN barcodes outright rather than burning an external API call
+  // and caching junk in the global catalog (Req 4.1.3)
+  if (!isValidISBN(isbn)) {
+    return res.status(400).json({ error: 'A valid ISBN-10 or ISBN-13 parameter is required.' });
   }
 
   // 1. Perform authorization verification on target bookshelf
@@ -676,8 +671,8 @@ router.put('/:bookId', async (req, res) => {
 router.get('/lookup/:isbn', async (req, res) => {
   const isbn = cleanISBN(req.params.isbn);
 
-  if (!isbn || isbn.length < 9) {
-    return res.status(400).json({ error: 'A valid ISBN parameter is required.' });
+  if (!isValidISBN(isbn)) {
+    return res.status(400).json({ error: 'A valid ISBN-10 or ISBN-13 parameter is required.' });
   }
 
   try {
