@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Library, FolderPlus, Compass, Users, Plus, X, BookOpen, Sparkles, RefreshCw, AlertTriangle, Book } from 'lucide-react';
+import {
+  FolderPlus, Compass, Users, X, BookOpen, Sparkles, RefreshCw,
+  AlertTriangle, Book, MapPin,
+} from 'lucide-react';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [shelves, setShelves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Create Modal Overlay State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newShelfName, setNewShelfName] = useState('');
@@ -96,13 +99,48 @@ export default function Dashboard() {
   const personalShelves = shelves.filter((s) => s.role === 'owner');
   const sharedShelves = shelves.filter((s) => s.role !== 'owner');
 
+  /** Stamp treatment per access scope, mirroring the RBAC vocabulary. */
+  const roleStamp = (shelf) => {
+    if (shelf.is_wishlist) return <span className="stamp stamp-tilt stamp-warning">★ Wishlist</span>;
+    if (shelf.role === 'owner') return <span className="stamp stamp-tilt">Owner</span>;
+    if (shelf.role === 'collaborator') return <span className="stamp stamp-tilt stamp-success">Collaborator</span>;
+    return <span className="stamp stamp-tilt stamp-muted">View Only</span>;
+  };
+
+  const shelfCard = (shelf, index) => (
+    <Link
+      key={shelf.id}
+      to={`/bookshelves/${shelf.id}`}
+      className="card card-spine card-link card-in"
+      style={{ ...styles.shelfCard, animationDelay: `${Math.min(index, 8) * 35}ms` }}
+    >
+      <div style={styles.shelfCardHeader}>
+        <h3 style={styles.shelfName}>{shelf.name}</h3>
+        {roleStamp(shelf)}
+      </div>
+
+      <hr className="rule-line" style={{ margin: '2px 0 10px' }} />
+
+      <p style={styles.shelfDesc}>
+        {shelf.description || 'No descriptive notes added yet.'}
+      </p>
+
+      <div style={styles.cardFooter}>
+        <span className="typed" style={styles.footerText}>
+          {shelf.role === 'owner' ? 'Personal drawer' : `Owner · ${shelf.owner_email}`}
+        </span>
+      </div>
+    </Link>
+  );
+
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
-        <div className="skeleton" style={{ width: '200px', height: '32px', marginBottom: '20px' }}></div>
+        <div className="skeleton" style={{ width: '220px', height: '38px' }} />
+        <div className="skeleton" style={{ width: '320px', height: '16px', marginBottom: '10px' }} />
         <div style={styles.shelfGrid}>
           {[1, 2, 3].map((n) => (
-            <div key={n} className="skeleton" style={{ height: '160px' }}></div>
+            <div key={n} className="skeleton" style={{ height: '168px' }} />
           ))}
         </div>
       </div>
@@ -111,119 +149,113 @@ export default function Dashboard() {
 
   return (
     <div style={styles.dashboardContainer}>
-      <header style={styles.header}>
+      <header className="page-head" style={styles.header}>
         <div>
-          <h1 style={styles.welcomeTitle}>My Libraries</h1>
-          <p style={styles.welcomeSub}>Catalog, sort, and collaborate on home physical inventory.</p>
+          <span className="eyebrow">The Collection</span>
+          <h1 className="page-title" style={{ marginTop: '4px' }}>My Libraries</h1>
+          <p className="page-subtitle">
+            Catalog, sort, and collaborate on your home physical inventory.
+          </p>
         </div>
-        
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button className="btn btn-secondary" onClick={handleOpenRoulette} style={styles.rouletteHeaderBtn}>
-            <Sparkles size={18} style={{ color: 'var(--accent-color)', marginRight: '6px' }} />
+
+        <div style={styles.headerActions}>
+          <button className="btn btn-secondary" onClick={handleOpenRoulette}>
+            <Sparkles size={17} />
             <span>Book Roulette</span>
           </button>
-          
+
           <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-            <FolderPlus size={20} />
+            <FolderPlus size={17} />
             <span>New Bookshelf</span>
           </button>
         </div>
       </header>
 
-      {error && <div className="error-shake" style={styles.errorText}>{error}</div>}
+      {error && (
+        <div className="error-shake" style={styles.errorText}>
+          <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+          <span>{error}</span>
+        </div>
+      )}
 
-      {/* 🏡 Personal Bookshelves Grid */}
+      {/* Personal Bookshelves */}
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
-          <BookOpen size={20} style={{ color: 'var(--accent-color)' }} />
+          <BookOpen size={17} style={{ color: 'var(--accent-color)' }} />
           <h2 style={styles.sectionTitle}>Personal Bookshelves</h2>
+          <span className="typed" style={styles.sectionCount}>
+            {personalShelves.length} {personalShelves.length === 1 ? 'drawer' : 'drawers'}
+          </span>
         </div>
+        <hr className="rule-double" style={{ margin: '0 0 16px' }} />
 
         {personalShelves.length === 0 ? (
-          <div style={styles.emptyCard} className="glass-panel">
-            <Compass size={40} style={{ color: 'var(--text-muted)' }} />
-            <p>You haven't created any bookshelves yet.</p>
+          <div style={styles.emptyCard}>
+            <Compass size={34} style={{ color: 'var(--text-muted)' }} />
+            <p style={{ color: 'var(--text-secondary)' }}>
+              You haven't created any bookshelves yet.
+            </p>
             <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>
               Create Your First Shelf
             </button>
           </div>
         ) : (
-          <div style={styles.shelfGrid}>
-            {personalShelves.map((shelf) => (
-              <Link key={shelf.id} to={`/bookshelves/${shelf.id}`} style={styles.shelfCard} className="glass-panel">
-                <div style={styles.shelfCardHeader}>
-                  <h3 style={styles.shelfName}>{shelf.name}</h3>
-                  {shelf.is_wishlist ? (
-                    <span style={{ ...styles.badge, ...styles.badgeWishlist }}>★ Wishlist</span>
-                  ) : (
-                    <span style={{ ...styles.badge, ...styles.badgeOwner }}>Owner</span>
-                  )}
-                </div>
-                <p style={styles.shelfDesc}>{shelf.description || 'No descriptive notes added yet.'}</p>
-                <div style={styles.cardFooter}>
-                  <span>Indexed Catalog</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+          <div style={styles.shelfGrid}>{personalShelves.map(shelfCard)}</div>
         )}
       </section>
 
-      {/* 👥 Shared Collaborative Bookshelves Grid */}
+      {/* Shared & Collaborative */}
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
-          <Users size={20} style={{ color: '#10b981' }} />
-          <h2 style={styles.sectionTitle}>Shared & Collaborative Libraries</h2>
+          <Users size={17} style={{ color: 'var(--success-color)' }} />
+          <h2 style={styles.sectionTitle}>Shared With Me</h2>
+          <span className="typed" style={styles.sectionCount}>
+            {sharedShelves.length} {sharedShelves.length === 1 ? 'drawer' : 'drawers'}
+          </span>
         </div>
+        <hr className="rule-double" style={{ margin: '0 0 16px' }} />
 
         {sharedShelves.length === 0 ? (
-          <div style={{ ...styles.emptyCard, minHeight: '120px' }} className="glass-panel">
-            <p style={{ color: 'var(--text-muted)' }}>No libraries have been shared with you yet.</p>
+          <div style={{ ...styles.emptyCard, padding: '30px 20px' }}>
+            <p className="typed" style={{ color: 'var(--text-muted)' }}>
+              No libraries have been shared with you yet.
+            </p>
           </div>
         ) : (
-          <div style={styles.shelfGrid}>
-            {sharedShelves.map((shelf) => (
-              <Link key={shelf.id} to={`/bookshelves/${shelf.id}`} style={styles.shelfCard} className="glass-panel">
-                <div style={styles.shelfCardHeader}>
-                  <h3 style={styles.shelfName}>{shelf.name}</h3>
-                  {shelf.is_wishlist ? (
-                    <span style={{ ...styles.badge, ...styles.badgeWishlist }}>★ Wishlist</span>
-                  ) : (
-                    <span
-                      style={{
-                        ...styles.badge,
-                        ...(shelf.role === 'collaborator' ? styles.badgeCollab : styles.badgeViewer),
-                      }}
-                    >
-                      {shelf.role}
-                    </span>
-                  )}
-                </div>
-                <p style={styles.shelfDesc}>{shelf.description || 'No descriptive notes added yet.'}</p>
-                <div style={styles.cardFooter}>
-                  <span style={styles.ownerContext}>Owner: {shelf.owner_email}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+          <div style={styles.shelfGrid}>{sharedShelves.map(shelfCard)}</div>
         )}
       </section>
 
-      {/* 🛠️ Create Bookshelf Modal Overlay */}
+      {/* Create Bookshelf Modal */}
       {isModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard} className="glass-panel error-shake">
+        <div style={styles.modalOverlay} onClick={() => !createLoading && setIsModalOpen(false)}>
+          <div
+            className="card card-spine card-in"
+            style={styles.modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Construct New Bookshelf</h3>
-              <button style={styles.closeModalBtn} onClick={() => setIsModalOpen(false)}>
-                <X size={20} />
+              <div>
+                <span className="eyebrow">New Entry</span>
+                <h3 style={styles.modalTitle}>Construct Bookshelf</h3>
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={styles.closeModalBtn}
+                onClick={() => setIsModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={18} />
               </button>
             </div>
 
+            <hr className="rule-double" style={{ margin: '0 0 18px' }} />
+
             <form onSubmit={handleCreateShelf} style={styles.modalForm}>
               <div className="form-group">
-                <label className="form-label">Bookshelf Name</label>
+                <label className="form-label" htmlFor="shelf-name">Bookshelf Name</label>
                 <input
+                  id="shelf-name"
                   type="text"
                   className="form-input"
                   value={newShelfName}
@@ -235,106 +267,124 @@ export default function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Short Description</label>
+                <label className="form-label" htmlFor="shelf-desc">Short Description</label>
                 <textarea
+                  id="shelf-desc"
                   className="form-input"
-                  style={{ minHeight: '100px', resize: 'none' }}
                   value={newShelfDesc}
                   onChange={(e) => setNewShelfDesc(e.target.value)}
-                  placeholder="Describe where this is situated (e.g. Oak wood bookcase by the window)"
+                  placeholder="Where does this live? e.g. Oak bookcase by the window"
                   disabled={createLoading}
                 />
               </div>
 
               <div style={styles.modalActions}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)} disabled={createLoading}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsModalOpen(false)}
+                  disabled={createLoading}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={createLoading}>
-                  {createLoading ? 'Building...' : 'Create Shelf'}
+                  {createLoading ? 'Filing…' : 'Create Shelf'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-      {/* 🎰 Book Roulette Modal Overlay */}
+
+      {/* Book Roulette Modal */}
       {isRouletteModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.rouletteModalCard} className="glass-panel">
-            <div style={{ ...styles.modalHeader, width: '100%' }}>
-              <h3 style={styles.modalTitle}>
-                <Sparkles size={20} style={{ color: 'var(--accent-color)', verticalAlign: 'middle', marginRight: '8px' }} />
-                <span>Book Roulette Selection</span>
-              </h3>
-              <button style={styles.closeModalBtn} onClick={handleCloseRoulette} disabled={rouletteLoading}>
-                <X size={20} />
+        <div style={styles.modalOverlay} onClick={() => !rouletteLoading && handleCloseRoulette()}>
+          <div
+            className="card card-spine card-in"
+            style={{ ...styles.modalCard, maxWidth: '440px', textAlign: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={styles.modalHeader}>
+              <div style={{ textAlign: 'left' }}>
+                <span className="eyebrow">Shelf Lottery</span>
+                <h3 style={styles.modalTitle}>Book Roulette</h3>
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={styles.closeModalBtn}
+                onClick={handleCloseRoulette}
+                disabled={rouletteLoading}
+                aria-label="Close"
+              >
+                <X size={18} />
               </button>
             </div>
 
+            <hr className="rule-double" style={{ margin: '0 0 18px' }} />
+
             {rouletteLoading && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 0', gap: '12px' }}>
-                <RefreshCw size={36} className="spin" style={{ color: 'var(--accent-color)' }} />
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '600' }}>Choosing your next read...</span>
+              <div style={styles.rouletteState}>
+                <RefreshCw size={30} className="spin" style={{ color: 'var(--accent-color)' }} />
+                <span className="typed">Drawing from the drawer…</span>
               </div>
             )}
 
             {rouletteError && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0', gap: '12px', textAlign: 'center' }}>
-                <AlertTriangle size={36} style={{ color: 'var(--danger-color)' }} />
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: '700' }}>{rouletteError}</span>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={handleCloseRoulette}
-                  style={{ height: '36px', fontSize: '0.8rem', marginTop: '12px' }}
-                >
+              <div style={styles.rouletteState}>
+                <AlertTriangle size={30} style={{ color: 'var(--danger-color)' }} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>{rouletteError}</span>
+                <button type="button" className="btn btn-secondary" onClick={handleCloseRoulette}>
                   Close
                 </button>
               </div>
             )}
 
             {!rouletteLoading && rouletteBook && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', width: '100%' }}>
+              <div style={styles.rouletteResult}>
                 {rouletteBook.cover_image_url ? (
-                  <img 
-                    src={rouletteBook.cover_image_url} 
-                    alt="" 
-                    style={styles.rouletteCover} 
-                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  <img
+                    src={rouletteBook.cover_image_url}
+                    alt=""
+                    style={styles.rouletteCover}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
                   />
                 ) : null}
-                <div style={{ ...styles.rouletteCoverFallback, display: rouletteBook.cover_image_url ? 'none' : 'flex' }}>
-                  <Book size={32} />
+                <div
+                  style={{
+                    ...styles.rouletteCoverFallback,
+                    display: rouletteBook.cover_image_url ? 'none' : 'flex',
+                  }}
+                >
+                  <Book size={30} />
                 </div>
 
-                <div style={styles.rouletteBookTitle}>{rouletteBook.title}</div>
-                <div style={styles.rouletteBookAuthor}>by {rouletteBook.author || 'Unknown Author'}</div>
-                
-                <span style={styles.rouletteShelfContext}>
-                  📍 Located on shelf: <strong>{rouletteBook.bookshelf_name}</strong>
+                <h4 style={styles.rouletteBookTitle}>{rouletteBook.title}</h4>
+                <p style={styles.rouletteBookAuthor}>
+                  by {rouletteBook.author || 'Unknown Author'}
+                </p>
+
+                <span className="stamp stamp-tilt" style={styles.rouletteShelfContext}>
+                  <MapPin size={11} />
+                  {rouletteBook.bookshelf_name}
                 </span>
 
-                <div style={{ ...styles.modalActions, marginTop: '20px', gap: '16px', justifyContent: 'center', width: '100%' }}>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    onClick={fetchRouletteBook}
-                    style={{ height: '40px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <RefreshCw size={16} />
+                <div style={styles.rouletteActions}>
+                  <button type="button" className="btn btn-secondary" onClick={fetchRouletteBook}>
+                    <RefreshCw size={15} />
                     <span>Roll Again</span>
                   </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-primary" 
+                  <button
+                    type="button"
+                    className="btn btn-primary"
                     onClick={() => {
                       handleCloseRoulette();
                       navigate(`/bookshelves/${rouletteBook.bookshelf_id}`);
                     }}
-                    style={{ height: '40px' }}
                   >
-                    <span>Read Now</span>
+                    <span>Go To Shelf</span>
                   </button>
                 </div>
               </div>
@@ -348,173 +398,159 @@ export default function Dashboard() {
 
 const styles = {
   dashboardContainer: {
-    paddingBottom: '40px',
+    paddingBottom: '32px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '32px',
+    gap: '34px',
     width: '100%',
   },
   loadingContainer: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '14px',
     width: '100%',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+    gap: '18px',
+    marginBottom: 0,
+  },
+  headerActions: {
+    display: 'flex',
+    gap: '10px',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: '16px',
-  },
-  welcomeTitle: {
-    fontSize: '2.25rem',
-    fontWeight: 800,
-  },
-  welcomeSub: {
-    color: 'var(--text-secondary)',
-    fontSize: '0.95rem',
   },
   errorText: {
-    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '9px',
+    padding: '11px 14px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid var(--danger-color)',
+    background: 'color-mix(in srgb, var(--danger-color) 8%, transparent)',
     color: 'var(--danger-color)',
     fontSize: '0.85rem',
   },
   section: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
   },
   sectionHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '9px',
+    marginBottom: '8px',
   },
   sectionTitle: {
-    fontSize: '1.25rem',
-    fontWeight: 750,
+    fontSize: 'var(--step-1)',
+    fontWeight: 600,
+  },
+  sectionCount: {
+    marginLeft: 'auto',
+    color: 'var(--text-muted)',
+    fontSize: '0.7rem',
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
   },
   shelfGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '20px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+    gap: '16px',
   },
   shelfCard: {
     display: 'flex',
     flexDirection: 'column',
-    padding: '24px',
-    borderRadius: 'var(--radius-md)',
-    gap: '12px',
+    padding: '18px 20px 16px 24px',
     cursor: 'pointer',
     textDecoration: 'none',
+    minHeight: '160px',
   },
   shelfCardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: '8px',
+    gap: '10px',
   },
   shelfName: {
-    fontSize: '1.15rem',
-    fontWeight: '700',
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.22rem',
+    fontWeight: 600,
+    lineHeight: 1.25,
     color: 'var(--text-primary)',
   },
   shelfDesc: {
-    fontSize: '0.9rem',
+    fontSize: '0.88rem',
     color: 'var(--text-secondary)',
-    lineHeight: '1.5',
+    lineHeight: 1.55,
     flex: 1,
   },
-  badge: {
-    fontSize: '0.7rem',
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    letterSpacing: '0.05em',
-  },
-  badgeOwner: {
-    backgroundColor: 'var(--accent-light)',
-    color: 'var(--accent-color)',
-  },
-  badgeWishlist: {
-    backgroundColor: 'rgba(234, 179, 8, 0.1)',
-    color: '#eab308',
-    border: '1px solid rgba(234, 179, 8, 0.2)',
-  },
-  badgeCollab: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    color: '#10b981',
-  },
-  badgeViewer: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    color: '#f59e0b',
-  },
   cardFooter: {
-    borderTop: '1px solid var(--border-glass)',
-    paddingTop: '12px',
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontWeight: '600',
+    borderTop: '1px solid var(--rule)',
+    paddingTop: '10px',
+    marginTop: '12px',
   },
-  ownerContext: {
-    textOverflow: 'ellipsis',
+  footerText: {
+    color: 'var(--text-muted)',
+    fontSize: '0.68rem',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    display: 'block',
     overflow: 'hidden',
+    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    maxWidth: '100%',
   },
   emptyCard: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '40px 20px',
+    justifyContent: 'center',
+    padding: '44px 20px',
     textAlign: 'center',
+    gap: '14px',
+    border: '1.5px dashed var(--rule)',
     borderRadius: 'var(--radius-md)',
-    gap: '16px',
-    color: 'var(--text-secondary)',
+    background: 'color-mix(in srgb, var(--bg-secondary) 45%, transparent)',
   },
   modalOverlay: {
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    inset: 0,
+    backgroundColor: 'rgba(28, 20, 12, 0.55)',
     zIndex: 200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
-    backdropFilter: 'blur(4px)',
   },
   modalCard: {
     width: '100%',
-    maxWidth: '500px',
-    padding: '30px',
+    maxWidth: '480px',
+    padding: '22px 26px 26px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
     boxShadow: 'var(--shadow-lg)',
+    maxHeight: '90vh',
+    overflowY: 'auto',
   },
   modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: '12px',
+    marginBottom: '10px',
   },
   modalTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '750',
+    fontSize: 'var(--step-2)',
+    fontWeight: 600,
+    marginTop: '2px',
   },
   closeModalBtn: {
-    background: 'none',
-    border: 'none',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
+    minHeight: '32px',
+    padding: '6px',
+    marginTop: '2px',
   },
   modalForm: {
     display: 'flex',
@@ -523,70 +559,62 @@ const styles = {
   modalActions: {
     display: 'flex',
     justifyContent: 'flex-end',
-    gap: '12px',
-    marginTop: '12px',
+    gap: '10px',
+    marginTop: '6px',
   },
-  rouletteHeaderBtn: {
-    height: '42px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '0 16px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-  },
-  rouletteModalCard: {
-    width: '100%',
-    maxWidth: '460px',
-    padding: '30px',
+  rouletteState: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
-    boxShadow: 'var(--shadow-lg)',
-    borderRadius: 'var(--radius-lg)',
-    textAlign: 'center',
     alignItems: 'center',
+    gap: '14px',
+    padding: '28px 0',
+  },
+  rouletteResult: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
   },
   rouletteCover: {
-    height: '180px',
-    borderRadius: 'var(--radius-sm)',
-    boxShadow: '0 6px 16px rgba(0,0,0,0.5)',
+    height: '168px',
+    borderRadius: 'var(--radius-xs)',
+    boxShadow: 'var(--shadow-md)',
     objectFit: 'cover',
-    marginBottom: '8px',
+    border: '1px solid var(--rule)',
+    marginBottom: '6px',
   },
   rouletteCoverFallback: {
-    height: '180px',
-    width: '120px',
-    borderRadius: 'var(--radius-sm)',
+    height: '168px',
+    width: '112px',
+    borderRadius: 'var(--radius-xs)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 6px 16px rgba(0,0,0,0.5)',
-    marginBottom: '8px',
+    boxShadow: 'var(--shadow-md)',
+    marginBottom: '6px',
     color: 'var(--text-muted)',
   },
   rouletteBookTitle: {
     fontSize: '1.2rem',
-    fontWeight: '800',
-    lineHeight: '1.3',
-    color: 'var(--text-primary)',
-    maxWidth: '360px',
+    fontWeight: 600,
+    lineHeight: 1.3,
+    maxWidth: '340px',
   },
   rouletteBookAuthor: {
-    fontSize: '0.9rem',
+    fontSize: '0.88rem',
     color: 'var(--text-secondary)',
-    fontWeight: '600',
-    marginTop: '4px',
   },
   rouletteShelfContext: {
-    fontSize: '0.8rem',
-    color: 'var(--accent-color)',
-    backgroundColor: 'var(--accent-light)',
-    padding: '6px 14px',
-    borderRadius: '16px',
-    fontWeight: '700',
     marginTop: '8px',
-    display: 'inline-block',
+  },
+  rouletteActions: {
+    display: 'flex',
+    gap: '10px',
+    justifyContent: 'center',
+    marginTop: '20px',
+    width: '100%',
   },
 };

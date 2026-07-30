@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, Volume2, VolumeX, AlertCircle, RefreshCw } from 'lucide-react';
+import { cleanISBN, isValidISBN } from '../utils/isbn';
 
 export default function BarcodeScanner({ onScanSuccess, onScanError }) {
   const [isActive, setIsActive] = useState(false);
@@ -153,53 +154,51 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
           aspectRatio: 1.0,
         };
 
-        try {
-          await html5Qrcode.start(
-            { facingMode: 'environment' }, // Target rear camera (Req 4.1.3)
-            config,
-            (decodedText) => {
-              if (isScannerPausedRef.current) return;
-              isScannerPausedRef.current = true;
+        const onDecoded = (decodedText) => {
+          if (isScannerPausedRef.current) return;
 
-              if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-                try {
-                  qrCodeRef.current.pause(true);
-                } catch (e) {
-                  console.warn('Scan pause error:', e);
-                }
-              }
-              // ISBN found!
-              triggerSuccessSignals();
-              handleScanLookup(decodedText);
-            },
-            (error) => {
-              if (onScanError) onScanError(error);
+          // Only ISBN-10/13 checksum matches count as a hit. Any other barcode
+          // (product UPCs, library stickers) is ignored so the camera keeps
+          // scanning without firing a false success signal (Req 4.1.3).
+          const candidate = cleanISBN(decodedText);
+          if (!isValidISBN(candidate)) return;
+
+          isScannerPausedRef.current = true;
+
+          if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+            try {
+              qrCodeRef.current.pause(true);
+            } catch (e) {
+              console.warn('Scan pause error:', e);
             }
+          }
+          // ISBN confirmed!
+          triggerSuccessSignals();
+          handleScanLookup(candidate);
+        };
+
+        const onDecodeFailure = (error) => {
+          if (onScanError) onScanError(error);
+        };
+
+        try {
+          // Req 4.1.3 mandates the exact rear-camera constraint; the catch below is
+          // the required programmatic fallback for devices with a single camera.
+          await html5Qrcode.start(
+            { facingMode: { exact: 'environment' } },
+            config,
+            onDecoded,
+            onDecodeFailure
           );
         } catch (envErr) {
-          console.warn('Rear camera environment constraint failed, trying default camera:', envErr);
-          // Fallback to default webcam constraints (works on desktops/laptops with single webcams)
-          await html5Qrcode.start(
-            {}, // Empty constraints allows browser to fallback to default webcam
-            config,
-            (decodedText) => {
-              if (isScannerPausedRef.current) return;
-              isScannerPausedRef.current = true;
-
-              if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-                try {
-                  qrCodeRef.current.pause(true);
-                } catch (e) {
-                  console.warn('Scan pause error:', e);
-                }
-              }
-              triggerSuccessSignals();
-              handleScanLookup(decodedText);
-            },
-            (error) => {
-              if (onScanError) onScanError(error);
-            }
-          );
+          console.warn('Exact rear camera constraint failed, relaxing to preferred environment:', envErr);
+          try {
+            await html5Qrcode.start({ facingMode: 'environment' }, config, onDecoded, onDecodeFailure);
+          } catch (preferredErr) {
+            console.warn('Preferred environment constraint failed, using default camera:', preferredErr);
+            // Empty constraints allows the browser to pick its default webcam
+            await html5Qrcode.start({}, config, onDecoded, onDecodeFailure);
+          }
         }
 
       } catch (err) {
@@ -255,7 +254,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
           ...styles.startPanel, 
           display: !isActive ? 'flex' : 'none' 
         }} 
-        className="glass-panel"
+        className="card"
       >
         <Camera size={44} style={styles.icon} />
         <h3 style={styles.title}>Camera Ingestion</h3>
@@ -297,7 +296,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
         </div>
 
         {/* Viewfinder frame */}
-        <div style={styles.cameraViewport} className="glass-panel">
+        <div style={styles.cameraViewport} className="card">
           <div id={scannerContainerId} style={styles.cameraPreview}></div>
           
           {/* Custom high-contrast scanning guide lines overlay */}
@@ -401,7 +400,7 @@ const styles = {
     gap: '8px',
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
     color: 'var(--danger-color)',
     fontSize: '0.85rem',
     textAlign: 'left',
@@ -431,7 +430,7 @@ const styles = {
     cursor: 'pointer',
     padding: '6px 12px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'var(--bg-glass)',
+    backgroundColor: 'var(--surface-raised)',
     fontSize: '0.9rem',
   },
   closeBtn: {
@@ -444,7 +443,7 @@ const styles = {
     aspectRatio: '1', // Square frame mapping
     overflow: 'hidden',
     backgroundColor: '#000000',
-    border: '2px solid var(--border-glass)',
+    border: '2px solid var(--rule)',
   },
   cameraPreview: {
     width: '100%',
@@ -490,7 +489,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    backgroundColor: 'rgba(22, 16, 11, 0.95)',
     backdropFilter: 'blur(8px)',
     display: 'flex',
     flexDirection: 'column',
@@ -512,8 +511,8 @@ const styles = {
     height: '110px',
     width: '75px',
     borderRadius: '4px',
-    backgroundColor: 'var(--bg-glass)',
-    border: '1px solid var(--border-glass)',
+    backgroundColor: 'var(--surface-raised)',
+    border: '1px solid var(--rule)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

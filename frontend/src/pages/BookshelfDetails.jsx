@@ -479,7 +479,7 @@ export default function BookshelfDetails() {
 
   if (error) {
     return (
-      <div style={styles.errorContainer} className="glass-panel error-shake">
+      <div style={styles.errorContainer} className="card error-shake">
         <AlertTriangle size={32} style={{ color: 'var(--danger-color)' }} />
         <h3>Access Denied</h3>
         <p>{error}</p>
@@ -538,7 +538,7 @@ export default function BookshelfDetails() {
 
       {/* 🔒 RBAC View Triggers (Hides all inputs/mutators if View-Only) (Req 4.3.2) */}
       {isCollaborator && (
-        <div style={styles.tabBar} className="glass-panel">
+        <div style={styles.tabBar} className="card">
           <button 
             style={{ ...styles.tabBtn, ...(activeTab === 'list' ? styles.tabBtnActive : {}) }}
             onClick={() => setActiveTab('list')}
@@ -575,7 +575,7 @@ export default function BookshelfDetails() {
 
       {/* 🔍 Search & Add Wildcard Books Tab (Req 1.2 Search) */}
       {isCollaborator && activeTab === 'search' && (
-        <div style={styles.searchForm} className="glass-panel">
+        <div style={styles.searchForm} className="card">
           <h2 style={styles.tabTitle}>Wildcard Catalog Search</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '12px', width: '100%' }}>
             Type a wildcard title or author to query the local cache and external volume APIs.
@@ -599,7 +599,7 @@ export default function BookshelfDetails() {
           </form>
 
           {searchError && (
-            <div style={{ ...styles.scanMessage, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-color)', alignSelf: 'stretch', maxWidth: 'none' }}>
+            <div style={{ ...styles.scanMessage, backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)', color: 'var(--danger-color)', alignSelf: 'stretch', maxWidth: 'none' }}>
               <AlertTriangle size={18} />
               <span>{searchError}</span>
             </div>
@@ -687,14 +687,14 @@ export default function BookshelfDetails() {
 
       {/* View Ingestion Scanner Tab */}
       {isCollaborator && activeTab === 'scan' && (
-        <div style={styles.tabContent} className="glass-panel">
+        <div style={styles.tabContent} className="card">
           <h2 style={styles.tabTitle}>Barcode Bar Scanner</h2>
           <BarcodeScanner onScanSuccess={handleScanSuccess} />
           
           {scanMessage && (
             <div style={{
               ...styles.scanMessage,
-              backgroundColor: scanMessage.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              backgroundColor: scanMessage.type === 'success' ? 'color-mix(in srgb, var(--success-color) 11%, transparent)' : 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
               color: scanMessage.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
             }}>
               {scanMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
@@ -706,7 +706,7 @@ export default function BookshelfDetails() {
 
       {/* View Manual Book Form Tab */}
       {isCollaborator && activeTab === 'manual' && (
-        <form onSubmit={handleManualSubmit} style={styles.manualForm} className="glass-panel">
+        <form onSubmit={handleManualSubmit} style={styles.manualForm} className="card">
           <h2 style={styles.tabTitle}>Register Book Details</h2>
           
           {prefilledIsbn && (
@@ -863,7 +863,7 @@ export default function BookshelfDetails() {
                     : `${shelf.books.length} ${shelf.books.length === 1 ? 'Book' : 'Books'}`}
                 </span>
                 
-                <div style={styles.toggleGroup} className="glass-panel">
+                <div style={styles.toggleGroup} className="card">
                   <button
                     style={{
                       ...styles.toggleBtn,
@@ -896,7 +896,7 @@ export default function BookshelfDetails() {
           )}
 
           {shelf.books.length === 0 ? (
-            <div style={styles.emptyBooks} className="glass-panel">
+            <div style={styles.emptyBooks} className="card">
               <Book size={48} style={{ color: 'var(--text-muted)' }} />
               <h3>Shelf is Empty</h3>
               <p>This library bookshelf currently has no cataloged entries.</p>
@@ -908,7 +908,7 @@ export default function BookshelfDetails() {
               )}
             </div>
           ) : filteredBooks.length === 0 ? (
-            <div style={styles.emptyBooks} className="glass-panel">
+            <div style={styles.emptyBooks} className="card">
               <Search size={48} style={{ color: 'var(--text-muted)' }} />
               <h3>No Matches Found</h3>
               <p>No books in this library shelf match your filter criteria: "{bookSearchQuery}"</p>
@@ -919,7 +919,7 @@ export default function BookshelfDetails() {
           ) : viewMode === 'grid' ? (
             <div style={styles.booksGrid}>
               {filteredBooks.map((b) => (
-                <div key={b.mapping_id} style={styles.bookCard} className="glass-panel">
+                <div key={b.mapping_id} style={styles.bookCard} className="card">
                   {/* Book Cover Container */}
                   <div style={styles.coverWrapper}>
                     {b.cover_image_url ? (
@@ -1014,7 +1014,7 @@ export default function BookshelfDetails() {
           ) : (
             <div style={styles.booksList}>
               {filteredBooks.map((b) => (
-                <div key={b.mapping_id} style={styles.listRow} className="glass-panel">
+                <div key={b.mapping_id} style={styles.listRow} className="card">
                   {/* Row cover thumbnail */}
                   <div style={styles.rowCoverWrapper}>
                     {b.cover_image_url ? (
@@ -1117,7 +1117,7 @@ export default function BookshelfDetails() {
       {/* 🛠️ Edit Annotations Modal */}
       {editingMapping && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalCard} className="glass-panel">
+          <div style={styles.modalCard} className="card">
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>Update Book Mapping</h3>
               <button style={styles.closeModalBtn} onClick={() => setEditingMapping(null)}>
@@ -1190,7 +1190,7 @@ export default function BookshelfDetails() {
       {/* 👥 Owner-Only Sharing Modal Portal */}
       {isShareModalOpen && shelf.isOwner && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalCard, maxWidth: '600px' }} className="glass-panel">
+          <div style={{ ...styles.modalCard, maxWidth: '600px' }} className="card">
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>Bookshelf Share Console</h3>
               <button style={styles.closeModalBtn} onClick={() => setIsShareModalOpen(false)}>
@@ -1315,8 +1315,10 @@ const styles = {
     flexWrap: 'wrap',
   },
   title: {
-    fontSize: '2.25rem',
-    fontWeight: 800,
+    fontFamily: 'var(--font-display)',
+    fontSize: 'var(--step-4)',
+    fontWeight: 600,
+    letterSpacing: '-0.015em',
   },
   desc: {
     color: 'var(--text-secondary)',
@@ -1389,8 +1391,8 @@ const styles = {
     gap: '8px',
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    color: '#d97706',
+    backgroundColor: 'color-mix(in srgb, var(--warning-color) 13%, transparent)',
+    color: 'var(--warning-color)',
     fontSize: '0.85rem',
     marginBottom: '20px',
   },
@@ -1428,8 +1430,8 @@ const styles = {
     flexDirection: 'column',
     borderRadius: 'var(--radius-md)',
     overflow: 'hidden',
-    border: '1px solid var(--border-glass)',
-    backgroundColor: 'var(--bg-glass)',
+    border: '1px solid var(--rule)',
+    backgroundColor: 'var(--surface-raised)',
     position: 'relative',
     transition: 'var(--transition-smooth)',
   },
@@ -1442,7 +1444,7 @@ const styles = {
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
   },
   coverImg: {
     width: '100%',
@@ -1457,7 +1459,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     color: 'var(--text-muted)',
-    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--border-glass) 100%)',
+    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--rule) 100%)',
   },
   bookDetails: {
     padding: '16px',
@@ -1494,7 +1496,7 @@ const styles = {
     padding: '2px 6px',
     borderRadius: '4px',
     color: 'var(--text-muted)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1525,7 +1527,7 @@ const styles = {
     padding: '10px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     marginTop: '4px',
   },
   notesText: {
@@ -1545,7 +1547,7 @@ const styles = {
     gap: '8px',
     marginTop: 'auto',
     paddingTop: '8px',
-    borderTop: '1px solid var(--border-glass)',
+    borderTop: '1px solid var(--rule)',
   },
   cardActionBtn: {
     background: 'none',
@@ -1559,7 +1561,7 @@ const styles = {
     transition: 'var(--transition-smooth)',
   },
   cardActionBtnHover: {
-    backgroundColor: 'var(--border-glass)',
+    backgroundColor: 'var(--rule)',
   },
   badge: {
     fontSize: '0.7rem',
@@ -1574,12 +1576,12 @@ const styles = {
     color: 'var(--accent-color)',
   },
   badgeCollab: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    color: '#10b981',
+    backgroundColor: 'color-mix(in srgb, var(--success-color) 11%, transparent)',
+    color: 'var(--success-color)',
   },
   badgeViewer: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    color: '#f59e0b',
+    backgroundColor: 'color-mix(in srgb, var(--warning-color) 13%, transparent)',
+    color: 'var(--warning-color)',
   },
   errorContainer: {
     display: 'flex',
@@ -1597,13 +1599,12 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(28, 20, 12, 0.55)',
     zIndex: 200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
-    backdropFilter: 'blur(4px)',
   },
   modalCard: {
     width: '100%',
@@ -1642,7 +1643,7 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
     fontSize: '0.85rem',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   modalActions: {
     display: 'flex',
@@ -1660,7 +1661,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
-    borderTop: '1px solid var(--border-glass)',
+    borderTop: '1px solid var(--rule)',
     paddingTop: '20px',
     marginTop: '8px',
   },
@@ -1689,7 +1690,7 @@ const styles = {
     padding: '10px 12px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   shareRowInfo: {
     display: 'flex',
@@ -1734,14 +1735,14 @@ const styles = {
     whiteSpace: 'nowrap',
   },
   readBadgeActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--success-color) 11%, transparent)',
     color: 'var(--success-color)',
-    border: '1px solid rgba(16, 185, 129, 0.2)',
+    border: '1px solid color-mix(in srgb, var(--success-color) 22%, transparent)',
   },
   readBadgeInactive: {
     backgroundColor: 'var(--bg-primary)',
     color: 'var(--text-muted)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   searchForm: {
     padding: '30px',
@@ -1767,7 +1768,7 @@ const styles = {
     gap: '16px',
     padding: '16px',
     borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     backgroundColor: 'var(--bg-secondary)',
     alignItems: 'center',
     width: '100%',
@@ -1788,7 +1789,7 @@ const styles = {
     justifyContent: 'center',
     borderRadius: 'var(--radius-xs)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     color: 'var(--text-muted)',
   },
   searchInfo: {
@@ -1830,9 +1831,9 @@ const styles = {
     marginTop: '2px',
   },
   sourceLocal: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--success-color) 11%, transparent)',
     color: 'var(--success-color)',
-    border: '1px solid rgba(16, 185, 129, 0.2)',
+    border: '1px solid color-mix(in srgb, var(--success-color) 22%, transparent)',
   },
   sourceGoogle: {
     backgroundColor: 'rgba(99, 102, 241, 0.1)',
@@ -1840,9 +1841,9 @@ const styles = {
     border: '1px solid rgba(99, 102, 241, 0.2)',
   },
   sourceOpenLibrary: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
     color: 'var(--danger-color)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
+    border: '1px solid color-mix(in srgb, var(--danger-color) 22%, transparent)',
   },
   skeletonList: {
     display: 'flex',
@@ -1872,8 +1873,8 @@ const styles = {
     display: 'flex',
     padding: '3px',
     borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border-glass)',
-    backgroundColor: 'var(--bg-glass)',
+    border: '1px solid var(--rule)',
+    backgroundColor: 'var(--surface-raised)',
     gap: '2px',
   },
   toggleBtn: {
@@ -1905,8 +1906,8 @@ const styles = {
     alignItems: 'center',
     borderRadius: 'var(--radius-md)',
     padding: '12px 16px',
-    border: '1px solid var(--border-glass)',
-    backgroundColor: 'var(--bg-glass)',
+    border: '1px solid var(--rule)',
+    backgroundColor: 'var(--surface-raised)',
     gap: '16px',
     transition: 'var(--transition-smooth)',
   },
@@ -1920,7 +1921,7 @@ const styles = {
     position: 'relative',
     overflow: 'hidden',
     borderRadius: '4px',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     flexShrink: 0,
   },
   rowCoverImg: {
@@ -1935,7 +1936,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     color: 'var(--text-muted)',
-    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--border-glass) 100%)',
+    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--rule) 100%)',
   },
   rowContent: {
     display: 'flex',
@@ -1991,7 +1992,7 @@ const styles = {
     padding: '4px 8px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     width: 'fit-content',
     maxWidth: '100%',
   },
@@ -2019,8 +2020,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     position: 'relative',
-    backgroundColor: 'var(--bg-glass)',
-    border: '1px solid var(--border-glass)',
+    backgroundColor: 'var(--surface-raised)',
+    border: '1px solid var(--rule)',
     borderRadius: 'var(--radius-sm)',
     padding: '0 12px',
     height: '38px',

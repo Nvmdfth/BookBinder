@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthProvider';
-import { Library, LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
+import AuthCard from '../components/AuthCard';
 
 export default function Login() {
   const { login } = useAuth();
@@ -27,144 +28,104 @@ export default function Login() {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card} className="glass-panel">
-        <div style={styles.brandHeader}>
-          <Library size={44} style={styles.logo} />
-          <h1 style={styles.brandTitle}>BookBinder</h1>
-          <p style={styles.subtitle}>Physical Library Catalog Engine</p>
-        </div>
-
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <h2 style={styles.title}>Sign In</h2>
-          
-          {error && (
-            <div style={styles.errorBanner} className="error-shake">
-              <AlertCircle size={18} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label">Email Address</label>
-            <input
-              type="email"
-              className="form-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. library@home.com"
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Account Password</label>
-            <input
-              type="password"
-              className="form-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your security password"
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={styles.submitBtn} disabled={loading}>
-            <LogIn size={20} />
-            <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
-          </button>
-        </form>
-
-        <div style={styles.footer}>
-          <span>Need an account?</span>
+    <AuthCard
+      accession="BB · CARD 001 · BORROWER ACCESS"
+      footer={
+        <p style={styles.footer}>
+          Need an account?{' '}
           <Link to="/register" style={styles.footerLink}>Register here</Link>
+        </p>
+      }
+    >
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <div style={styles.titleRow}>
+          <h2 style={styles.title}>Sign In</h2>
+          <span className="stamp stamp-tilt stamp-muted">Members</span>
         </div>
-      </div>
-    </div>
+
+        {error && (
+          <div style={styles.errorBanner} className="error-shake">
+            <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="login-email">Email Address</label>
+          <input
+            id="login-email"
+            type="email"
+            className="form-input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="library@home.com"
+            required
+            disabled={loading}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="login-password">Account Password</label>
+          <input
+            id="login-password"
+            type="password"
+            className="form-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            required
+            disabled={loading}
+          />
+        </div>
+
+        <button type="submit" className="btn btn-primary" style={styles.submitBtn} disabled={loading}>
+          <LogIn size={18} />
+          <span>{loading ? 'Checking the register…' : 'Sign In'}</span>
+        </button>
+      </form>
+    </AuthCard>
   );
 }
 
 const styles = {
-  container: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    width: '100vw',
-    backgroundColor: 'var(--bg-primary)',
-    padding: '20px',
-  },
-  card: {
-    width: '100%',
-    maxWidth: '440px',
-    padding: '40px 30px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    boxShadow: 'var(--shadow-lg)',
-  },
-  brandHeader: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-    gap: '4px',
-  },
-  logo: {
-    color: 'var(--accent-color)',
-    marginBottom: '8px',
-  },
-  brandTitle: {
-    fontSize: '2rem',
-    fontWeight: 850,
-    background: 'var(--accent-gradient)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-  },
-  subtitle: {
-    fontSize: '0.85rem',
-    color: 'var(--text-muted)',
-    fontWeight: '600',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-  },
   form: {
     display: 'flex',
     flexDirection: 'column',
     width: '100%',
   },
-  title: {
-    fontSize: '1.25rem',
+  titleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
     marginBottom: '20px',
-    fontWeight: '700',
+  },
+  title: {
+    fontSize: 'var(--step-2)',
+    fontWeight: 600,
   },
   submitBtn: {
-    marginTop: '8px',
+    marginTop: '4px',
     width: '100%',
   },
   errorBanner: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '8px',
-    padding: '12px 16px',
+    gap: '9px',
+    padding: '11px 14px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid var(--danger-color)',
+    background: 'color-mix(in srgb, var(--danger-color) 8%, transparent)',
     color: 'var(--danger-color)',
     fontSize: '0.85rem',
-    marginBottom: '20px',
+    marginBottom: '18px',
   },
   footer: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '6px',
-    fontSize: '0.9rem',
+    textAlign: 'center',
+    fontSize: '0.88rem',
     color: 'var(--text-secondary)',
-    borderTop: '1px solid var(--border-glass)',
-    paddingTop: '20px',
   },
   footerLink: {
-    fontWeight: '700',
+    fontWeight: 700,
   },
 };

@@ -1,169 +1,212 @@
-/* Import Premium Typography */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+/* ==========================================================================
+   BookBinder — "Card Catalog" design system
+
+   The visual language borrows from a physical library: warm paper stock, ink
+   serif headings, ruled index-card dividers, rubber-stamp badges, and coloured
+   book-spine edges on cards.
+
+   Light mode is the primary look (paper). Dark mode is an ink reading-room
+   variant anchored on the #121212 / #1e1e1e surfaces named in PRD Req 4.1.2.
+
+   Palette ids (indigo/lavender/emerald/sunset/cyberpunk) are persisted per user
+   in users.palette, so the ids are kept stable even though the presentation is
+   now named after bookbinding cloths. Only the display names in
+   context/ThemeProvider.jsx changed.
+   ========================================================================== */
 
 :root {
-  /* Font Family Mappings */
-  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Typography — resolved from system faces so a self-hosted instance needs no
+     network access. The serif stack lands on genuine book faces on every OS. */
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua',
+                  Georgia, 'Times New Roman', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+               Arial, sans-serif;
+  --font-stamp: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas,
+                'Courier New', monospace;
 
-  /* Global Status Colors (Semantic) */
-  --success-color: #10b981; /* Emerald */
-  --warning-color: #f59e0b; /* Amber */
-  --danger-color: #ef4444;  /* Rose */
+  /* Retained: a few call sites still reference the old heading token */
+  --font-heading: var(--font-display);
 
-  /* Structural Default Metrics */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 20px 40px -15px rgba(99, 102, 241, 0.1);
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  
-  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Type scale (1.25 minor third, 16px base) */
+  --step--1: 0.8rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.5625rem;
+  --step-3: 1.9531rem;
+  --step-4: 2.4414rem;
+
+  /* Semantic status colours — muted to sit beside paper rather than glow on it */
+  --success-color: #2f7d55;
+  --warning-color: #b57a1f;
+  --danger-color: #b3382f;
+
+  /* Card stock depth: short, soft, low-opacity — paper does not float */
+  --shadow-sm: 0 1px 2px rgba(40, 30, 20, 0.06);
+  --shadow-md: 0 2px 4px rgba(40, 30, 20, 0.07), 0 6px 14px -6px rgba(40, 30, 20, 0.09);
+  --shadow-lg: 0 4px 8px rgba(40, 30, 20, 0.08), 0 16px 32px -12px rgba(40, 30, 20, 0.14);
+
+  /* Index cards have modest corners, not pill shapes */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --spine-width: 5px;
+
+  --transition-smooth: all 0.22s cubic-bezier(0.32, 0.72, 0.3, 1);
+  --transition-bounce: all 0.34s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
-/* Palette 1: Indigo Breeze (Default) */
+/* --------------------------------------------------------------------------
+   Palettes — each is a bookbinding cloth. Every text token below clears
+   WCAG AA (4.5:1) against both surface colours; enforced by
+   src/tests/themeContrast.test.js.
+   -------------------------------------------------------------------------- */
+
+/* Palette 1: Library Buckram (default) */
 [data-palette='indigo'][data-theme='light'] {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.7);
-  --border-glass: rgba(226, 232, 240, 0.8);
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --accent-color: #6366f1;
-  --accent-light: #e0e7ff;
-  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
+  --bg-primary: #f4efe3;
+  --bg-secondary: #fffcf5;
+  --surface-raised: #fffcf5;
+  --rule: #ded3bf;
+  --text-primary: #1c1712;
+  --text-secondary: #4a4136;
+  --text-muted: #6f6455;
+  --accent-color: #3a4a9f;
+  --accent-light: #e4e5f4;
+  --accent-gradient: linear-gradient(135deg, #3a4a9f 0%, #55407f 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #2f3d87 0%, #46346a 100%);
 }
 [data-palette='indigo'][data-theme='dark'] {
-  --bg-primary: #121212;   /* True Off-Black */
-  --bg-secondary: #1a1a1a; /* Charcoal Slate */
-  --bg-glass: rgba(26, 26, 26, 0.7);
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #64748b;
-  --accent-color: #818cf8;
-  --accent-light: #2d1a4d;
-  --accent-gradient: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --bg-primary: #121212;   /* True off-black (Req 4.1.2) */
+  --bg-secondary: #1e1e1e; /* Muted charcoal slate (Req 4.1.2) */
+  --surface-raised: #1e1e1e;
+  --rule: #35322c;
+  --text-primary: #f5f1e8;
+  --text-secondary: #cfc7b8;
+  --text-muted: #9a917f;
+  --accent-color: #8fa0f0;
+  --accent-light: #23253a;
+  --accent-gradient: linear-gradient(135deg, #8fa0f0 0%, #b295e8 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #a3b1f4 0%, #c1a8ee 100%);
 }
 
-/* Palette 2: Midnight Lavender */
+/* Palette 2: Marbled Endpaper */
 [data-palette='lavender'][data-theme='light'] {
-  --bg-primary: #faf8ff;
-  --bg-secondary: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.75);
-  --border-glass: rgba(233, 224, 255, 0.8);
-  --text-primary: #1e152a;
-  --text-secondary: #584b67;
-  --text-muted: #a69bb5;
-  --accent-color: #7c3aed;
-  --accent-light: #f3e8ff;
-  --accent-gradient: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #6d28d9 0%, #be185d 100%);
+  --bg-primary: #f4eff0;
+  --bg-secondary: #fffbfc;
+  --surface-raised: #fffbfc;
+  --rule: #ded0d6;
+  --text-primary: #1e1519;
+  --text-secondary: #4b3d45;
+  --text-muted: #6f5f68;
+  --accent-color: #7a3f8f;
+  --accent-light: #f0e4f4;
+  --accent-gradient: linear-gradient(135deg, #7a3f8f 0%, #a33b6b 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #67337a 0%, #8b3159 100%);
 }
 [data-palette='lavender'][data-theme='dark'] {
-  --bg-primary: #0b0713;
-  --bg-secondary: #140e22;
-  --bg-glass: rgba(20, 14, 34, 0.7);
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --text-primary: #f5f2fa;
-  --text-secondary: #d6cfe1;
-  --text-muted: #7c708f;
-  --accent-color: #a78bfa;
-  --accent-light: #2e1654;
-  --accent-gradient: linear-gradient(135deg, #a78bfa 0%, #f472b6 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  --bg-primary: #141115;
+  --bg-secondary: #201b22;
+  --surface-raised: #201b22;
+  --rule: #38303b;
+  --text-primary: #f5eff3;
+  --text-secondary: #d0c4cc;
+  --text-muted: #9c8d97;
+  --accent-color: #c79ae0;
+  --accent-light: #2e2136;
+  --accent-gradient: linear-gradient(135deg, #c79ae0 0%, #e39ab8 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #d3ade8 0%, #eaadc5 100%);
 }
 
-/* Palette 3: Emerald Rainforest */
+/* Palette 3: Morocco Green */
 [data-palette='emerald'][data-theme='light'] {
-  --bg-primary: #f4fcf7;
-  --bg-secondary: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.75);
-  --border-glass: rgba(209, 237, 222, 0.8);
-  --text-primary: #062f1c;
-  --text-secondary: #2c4c3e;
-  --text-muted: #7fa694;
-  --accent-color: #059669;
-  --accent-light: #d1fae5;
-  --accent-gradient: linear-gradient(135deg, #059669 0%, #0d9488 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #047857 0%, #0f766e 100%);
+  --bg-primary: #eff3ec;
+  --bg-secondary: #fbfdf9;
+  --surface-raised: #fbfdf9;
+  --rule: #cfdac9;
+  --text-primary: #141a13;
+  --text-secondary: #3d4a3a;
+  --text-muted: #5f6d5b;
+  --accent-color: #2f6b45;
+  --accent-light: #dcecdf;
+  --accent-gradient: linear-gradient(135deg, #2f6b45 0%, #2c6360 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #275a3a 0%, #245350 100%);
 }
 [data-palette='emerald'][data-theme='dark'] {
-  --bg-primary: #04100b;
-  --bg-secondary: #0a1b14;
-  --bg-glass: rgba(10, 27, 20, 0.75);
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --text-primary: #e6f7ef;
-  --text-secondary: #b2d6c6;
-  --text-muted: #5e8c78;
-  --accent-color: #34d399;
-  --accent-light: #0d2e20;
-  --accent-gradient: linear-gradient(135deg, #34d399 0%, #2dd4bf 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #059669 0%, #0d9488 100%);
+  --bg-primary: #101410;
+  --bg-secondary: #1a201a;
+  --surface-raised: #1a201a;
+  --rule: #2c352b;
+  --text-primary: #eef4ec;
+  --text-secondary: #c4d0c0;
+  --text-muted: #8d9a89;
+  --accent-color: #74c88f;
+  --accent-light: #1c2f24;
+  --accent-gradient: linear-gradient(135deg, #74c88f 0%, #6cc4b8 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #88d29f 0%, #81cec4 100%);
 }
 
-/* Palette 4: Sunset Oasis */
+/* Palette 4: Foxed Calfskin */
 [data-palette='sunset'][data-theme='light'] {
-  --bg-primary: #fdfaf7;
-  --bg-secondary: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.75);
-  --border-glass: rgba(254, 235, 218, 0.8);
-  --text-primary: #2d1804;
-  --text-secondary: #5f452e;
-  --text-muted: #bda38b;
-  --accent-color: #ea580c;
-  --accent-light: #ffedd5;
-  --accent-gradient: linear-gradient(135deg, #ea580c 0%, #d97706 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #ca8a04 0%, #b45309 100%);
+  --bg-primary: #f6efe4;
+  --bg-secondary: #fffbf3;
+  --surface-raised: #fffbf3;
+  --rule: #e2d4bd;
+  --text-primary: #1f1710;
+  --text-secondary: #4e4032;
+  --text-muted: #736149;
+  --accent-color: #9a5a17;
+  --accent-light: #f6e6cf;
+  --accent-gradient: linear-gradient(135deg, #9a5a17 0%, #8a5320 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #854d13 0%, #74451a 100%);
 }
 [data-palette='sunset'][data-theme='dark'] {
-  --bg-primary: #120c04;
-  --bg-secondary: #1f140a;
-  --bg-glass: rgba(31, 20, 10, 0.75);
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --text-primary: #fdf5ed;
-  --text-secondary: #e6ceb8;
-  --text-muted: #8c735c;
-  --accent-color: #fb923c;
-  --accent-light: #4c2206;
-  --accent-gradient: linear-gradient(135deg, #fb923c 0%, #fbbf24 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #ea580c 0%, #f59e0b 100%);
+  --bg-primary: #15110c;
+  --bg-secondary: #211b14;
+  --surface-raised: #211b14;
+  --rule: #3a3125;
+  --text-primary: #f7f1e6;
+  --text-secondary: #d6c9b4;
+  --text-muted: #a0917a;
+  --accent-color: #dda05a;
+  --accent-light: #35281a;
+  --accent-gradient: linear-gradient(135deg, #dda05a 0%, #d4b06a 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #e5ae6d 0%, #dcbb7c 100%);
 }
 
-/* Palette 5: Cyberpunk Neon */
+/* Palette 5: Crimson Cloth */
 [data-palette='cyberpunk'][data-theme='light'] {
-  --bg-primary: #fcfaff;
-  --bg-secondary: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.7);
-  --border-glass: rgba(245, 220, 255, 0.8);
-  --text-primary: #18002a;
-  --text-secondary: #583377;
-  --text-muted: #b499c8;
-  --accent-color: #d946ef;
-  --accent-light: #fae8ff;
-  --accent-gradient: linear-gradient(135deg, #d946ef 0%, #06b6d4 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #c084fc 0%, #0891b2 100%);
+  --bg-primary: #f6eeec;
+  --bg-secondary: #fffbfa;
+  --surface-raised: #fffbfa;
+  --rule: #e3cfcb;
+  --text-primary: #1f1412;
+  --text-secondary: #4d3a36;
+  --text-muted: #725a55;
+  --accent-color: #a02f36;
+  --accent-light: #f6dfdd;
+  --accent-gradient: linear-gradient(135deg, #a02f36 0%, #85304c 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #8a2830 0%, #702840 100%);
 }
 [data-palette='cyberpunk'][data-theme='dark'] {
-  --bg-primary: #030008;
-  --bg-secondary: #0d011a;
-  --bg-glass: rgba(13, 1, 26, 0.7);
-  --border-glass: rgba(255, 255, 255, 0.08);
-  --text-primary: #faebff;
-  --text-secondary: #e2b3ff;
-  --text-muted: #885baf;
-  --accent-color: #f43f5e;
-  --accent-light: #2c0022;
-  --accent-gradient: linear-gradient(135deg, #f43f5e 0%, #a855f7 50%, #06b6d4 100%);
-  --accent-hover-gradient: linear-gradient(135deg, #e11d48 0%, #9333ea 50%, #0891b2 100%);
+  --bg-primary: #150f0e;
+  --bg-secondary: #211917;
+  --surface-raised: #211917;
+  --rule: #3b2e2b;
+  --text-primary: #f7efec;
+  --text-secondary: #d8c6c1;
+  --text-muted: #a28d87;
+  --accent-color: #e8848a;
+  --accent-light: #37211f;
+  --accent-gradient: linear-gradient(135deg, #e8848a 0%, #dd8fa8 100%);
+  --accent-hover-gradient: linear-gradient(135deg, #ee979c 0%, #e5a2b6 100%);
 }
 
-/* Reset and Global Styles */
+/* --------------------------------------------------------------------------
+   Reset & base
+   -------------------------------------------------------------------------- */
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -175,23 +218,48 @@ body {
   font-family: var(--font-body);
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  font-size: var(--step-0);
   line-height: 1.6;
   overflow-x: hidden;
-  transition: background-color 0.4s ease, color 0.4s ease;
+  transition: background-color 0.35s ease, color 0.35s ease;
+
+  /* Paper grain: two barely-there tints plus a fine fibre weave. Cheap enough
+     to sit on the body without costing a repaint the way backdrop-filter did. */
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(140, 110, 70, 0.05), transparent 55%),
+    radial-gradient(circle at 82% 80%, rgba(120, 90, 60, 0.045), transparent 50%),
+    repeating-linear-gradient(94deg, rgba(120, 95, 60, 0.016) 0 2px, transparent 2px 5px);
+  background-attachment: fixed;
+}
+
+[data-theme='dark'] body {
+  /* Ink absorbs grain — keep only the faintest tone so the black stays true */
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(255, 244, 220, 0.022), transparent 55%),
+    radial-gradient(circle at 82% 80%, rgba(255, 240, 215, 0.018), transparent 50%);
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.011em;
+  line-height: 1.22;
   color: var(--text-primary);
 }
+
+h1 { font-size: var(--step-4); }
+h2 { font-size: var(--step-3); }
+h3 { font-size: var(--step-2); }
+h4 { font-size: var(--step-1); }
 
 a {
   color: var(--accent-color);
   text-decoration: none;
+  text-underline-offset: 3px;
   transition: var(--transition-smooth);
 }
+
+a:hover { text-decoration: underline; }
 
 button, input, textarea, select {
   font-family: inherit;
@@ -199,166 +267,563 @@ button, input, textarea, select {
   outline: none;
 }
 
-/* Custom Styled Layout & Containers */
-.glass-panel {
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-glass);
-  box-shadow: var(--shadow-md);
+/* Visible keyboard focus everywhere — the previous system had none */
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+::selection {
+  background: var(--accent-color);
+  color: var(--bg-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Card — the catalog card. Replaces the old translucent .glass-panel.
+   -------------------------------------------------------------------------- */
+
+.card {
+  position: relative;
+  /* Card stock catches a little more light than the desk it sits on.
+     Applied as a background layer rather than an ::after overlay: an absolutely
+     positioned pseudo-element paints above the card's own in-flow content and
+     would wash out every heading it covered. */
+  background-color: var(--bg-secondary);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.55), transparent 42%);
+  border: 1px solid var(--rule);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   transition: var(--transition-smooth);
 }
 
-.glass-panel:hover {
-  box-shadow: var(--shadow-lg);
+[data-theme='dark'] .card {
+  background-image: linear-gradient(160deg, rgba(255, 250, 235, 0.038), transparent 42%);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent-color) 28%, var(--rule));
+}
+
+/* Interactive cards lift; static panels should not, so lift is opt-in */
+.card-link:hover {
   transform: translateY(-2px);
 }
 
-/* Buttons Design system (Rich Aesthetics) */
+/* Coloured book-spine edge down the leading side of a card */
+.card-spine {
+  overflow: hidden;
+}
+
+.card-spine::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--spine-width);
+  background: var(--accent-color);
+  /* Hint of the recessed groove where cloth wraps the board */
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.22);
+  z-index: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Ruled dividers & eyebrow labels (index-card furniture)
+   -------------------------------------------------------------------------- */
+
+.rule-line {
+  border: 0;
+  border-top: 1px dotted var(--rule);
+  margin: 14px 0;
+}
+
+.rule-solid {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 14px 0;
+}
+
+/* The double rule under a catalog heading */
+.rule-double {
+  border: 0;
+  border-top: 3px double var(--rule);
+  margin: 12px 0 18px;
+}
+
+.eyebrow {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Typewriter metadata, as on a real catalog card */
+.typed {
+  font-family: var(--font-stamp);
+  font-size: 0.78rem;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Stamp — rubber-stamped status badge
+   -------------------------------------------------------------------------- */
+
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  font-family: var(--font-stamp);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent-color);
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-xs);
+  opacity: 0.92;
+  white-space: nowrap;
+}
+
+/* Struck slightly off-square, the way a hand stamp lands */
+.stamp-tilt { transform: rotate(-1.6deg); }
+
+.stamp-success { color: var(--success-color); }
+.stamp-warning { color: var(--warning-color); }
+.stamp-danger  { color: var(--danger-color); }
+.stamp-muted   { color: var(--text-muted); }
+
+/* Solid variant for counts and primary figures */
+.stamp-filled {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--bg-secondary);
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 10px 20px;
+  min-height: 42px;
   border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  border: none;
-  transition: var(--transition-bounce);
-  font-family: var(--font-heading);
+  border: 1px solid transparent;
+  transition: var(--transition-smooth);
+  text-decoration: none;
+}
+
+.btn:hover { text-decoration: none; }
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
 }
 
 .btn-primary {
-  background: var(--accent-gradient);
-  color: #ffffff;
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover-gradient);
-  transform: scale(1.03);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-color) 86%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 86%, var(--text-primary));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
-.btn-primary:active {
-  transform: scale(0.97);
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-secondary {
   background: var(--bg-secondary);
   color: var(--text-primary);
-  border: 1px solid var(--border-glass);
+  border-color: var(--rule);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: var(--accent-light);
+  border-color: var(--accent-color);
   color: var(--accent-color);
   transform: translateY(-1px);
 }
 
+.btn-secondary:active:not(:disabled) { transform: translateY(0); }
+
 .btn-danger {
-  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+  background: var(--danger-color);
+  border-color: var(--danger-color);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
-.btn-danger:hover {
-  transform: scale(1.03);
-  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger-color) 85%, #000);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
-/* Premium Form Elements */
+.btn-success {
+  background: var(--success-color);
+  border-color: var(--success-color);
+  color: #fff;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success-color) 85%, #000);
+  transform: translateY(-1px);
+}
+
+/* Quiet text button for tertiary actions */
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--accent-light);
+  color: var(--accent-color);
+}
+
+/* --------------------------------------------------------------------------
+   Forms — fields typed onto a catalog card
+   -------------------------------------------------------------------------- */
+
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   width: 100%;
 }
 
 .form-label {
   display: block;
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: var(--text-secondary);
-  font-family: var(--font-heading);
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+  color: var(--text-muted);
 }
 
 .form-input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 11px 14px;
   border-radius: var(--radius-sm);
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-glass);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--rule);
   color: var(--text-primary);
   transition: var(--transition-smooth);
 }
 
+.form-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
 .form-input:focus {
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  background-color: var(--bg-secondary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 16%, transparent);
 }
 
-/* Custom Micro-Animations */
+.form-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 88px;
+  line-height: 1.6;
+}
+
+select.form-input {
+  cursor: pointer;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% + 2px), calc(100% - 13px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 38px;
+}
+
+/* --------------------------------------------------------------------------
+   Application shell — real CSS with real media queries. This replaces the
+   runtime-injected <style> block that used !important element selectors.
+   -------------------------------------------------------------------------- */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.app-sidebar {
+  width: 268px;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  bottom: 18px;
+  z-index: 100;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-md);
+}
+
+.app-main {
+  flex: 1;
+  padding: 36px 40px 56px;
+  margin-left: 304px;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.app-content {
+  width: 100%;
+  max-width: 1120px;
+}
+
+.app-mobile-header,
+.app-bottom-tray {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .app-sidebar { display: none; }
+
+  .app-main {
+    margin-left: 0;
+    padding: 74px 15px 88px;
+  }
+
+  .app-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 58px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    padding: 0 15px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--rule);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Sticky thumb-reachable tray (Req 4.1.1) */
+  .app-bottom-tray {
+    display: flex;
+    height: 62px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    justify-content: space-around;
+    align-items: stretch;
+    padding: 0 8px;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--rule);
+    box-shadow: 0 -2px 10px rgba(40, 30, 20, 0.07);
+  }
+}
+
+/* Sidebar / tray navigation items */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: var(--transition-smooth);
+  position: relative;
+}
+
+.nav-link:hover {
+  background: var(--accent-light);
+  color: var(--accent-color);
+  text-decoration: none;
+}
+
+.nav-link-active {
+  background: var(--accent-light);
+  color: var(--accent-color);
+}
+
+/* Spine marker on the active shelf, matching the card motif */
+.nav-link-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-color);
+}
+
+.tray-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: var(--transition-smooth);
+  border-top: 2px solid transparent;
+}
+
+.tray-link:hover { text-decoration: none; }
+
+.tray-link-active {
+  color: var(--accent-color);
+  border-top-color: var(--accent-color);
+}
+
+/* --------------------------------------------------------------------------
+   Page headings
+   -------------------------------------------------------------------------- */
+
+.page-head {
+  margin-bottom: 26px;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: var(--step-4);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+}
+
+.page-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  margin-top: 5px;
+}
+
+/* --------------------------------------------------------------------------
+   Motion
+   -------------------------------------------------------------------------- */
+
 @keyframes visualPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-    border-color: #10b981;
-  }
-  70% {
-    box-shadow: 0 0 0 15px rgba(16, 185, 129, 0);
-    border-color: #10b981;
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-    border-color: rgba(16, 185, 129, 0.4);
-  }
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-color) 65%, transparent);
+         border-color: var(--success-color); }
+  70%  { box-shadow: 0 0 0 15px transparent; border-color: var(--success-color); }
+  100% { box-shadow: 0 0 0 0 transparent;
+         border-color: color-mix(in srgb, var(--success-color) 40%, transparent); }
 }
 
-.scan-pulse {
-  animation: visualPulse 1.2s infinite;
-}
+.scan-pulse { animation: visualPulse 1.2s infinite; }
 
-/* Shimmer Loaders */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
+  0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--border-glass) 50%, var(--bg-secondary) 75%);
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--rule) 50%, var(--bg-secondary) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: var(--radius-sm);
 }
 
-/* Haptic visual warning overlay */
 @keyframes errorShake {
   0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-6px); }
-  75% { transform: translateX(6px); }
+  25%      { transform: translateX(-6px); }
+  75%      { transform: translateX(6px); }
 }
 
-.error-shake {
-  animation: errorShake 0.4s ease-in-out;
+.error-shake { animation: errorShake 0.4s ease-in-out; }
+
+/* Referenced by the scanner and several loading states but never previously
+   defined, so those spinners sat motionless. */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-/* Dynamic Palette Selection Swatch Hover Interactions */
-.palette-hover-btn {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+.spin { animation: spin 0.9s linear infinite; }
+
+/* Cards easing in as a shelf list resolves */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+
+.card-in { animation: cardIn 0.3s cubic-bezier(0.32, 0.72, 0.3, 1) both; }
+
+.palette-hover-btn { transition: var(--transition-bounce) !important; }
 
 .palette-hover-btn:hover {
-  transform: translateY(-3px) scale(1.02);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-md) !important;
   border-color: var(--accent-color) !important;
 }
 
-.palette-hover-btn:active {
-  transform: translateY(-1px) scale(0.99);
+.palette-hover-btn:active { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-/* Hide html5-qrcode's auto-generated visual canvas overlay to prevent double/misaligned reticle */
+/* --------------------------------------------------------------------------
+   Utilities
+   -------------------------------------------------------------------------- */
+
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide html5-qrcode's auto-generated canvas so it cannot double up on our own
+   reticle overlay and render it misaligned. */
 #bookbinder-scanner-view canvas {
   display: none !important;
 }

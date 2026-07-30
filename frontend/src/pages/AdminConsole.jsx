@@ -231,7 +231,7 @@ export default function AdminConsole() {
 
   if (!isAdmin) {
     return (
-      <div style={styles.errorContainer} className="glass-panel error-shake">
+      <div style={styles.errorContainer} className="card error-shake">
         <ShieldAlert size={44} style={{ color: 'var(--danger-color)' }} />
         <h2>Privilege Access Violation</h2>
         <p>Forbidden. This console settings area requires administrative credentials access parameters.</p>
@@ -268,7 +268,7 @@ export default function AdminConsole() {
 
       <div style={styles.grid}>
         {/* Toggles Panel */}
-        <div style={styles.card} className="glass-panel">
+        <div style={styles.card} className="card">
           <h2 style={styles.cardTitle}>
             <Settings size={20} style={{ color: 'var(--accent-color)' }} />
             <span>System Switches</span>
@@ -332,7 +332,7 @@ export default function AdminConsole() {
         </div>
 
         {/* Global Catalog Orphan Index Pruner */}
-        <div style={styles.card} className="glass-panel">
+        <div style={styles.card} className="card">
           <h2 style={styles.cardTitle}>
             <Database size={20} style={{ color: 'var(--success-color)' }} />
             <span>Global Books Catalog Cache</span>
@@ -391,7 +391,7 @@ export default function AdminConsole() {
         </div>
 
         {/* 👥 User Account audits & management console (v1.1) */}
-        <div style={{ ...styles.card, flex: '1 1 100%' }} className="glass-panel">
+        <div style={{ ...styles.card, flex: '1 1 100%' }} className="card">
           <h2 style={styles.cardTitle}>
             <Users size={20} style={{ color: 'var(--accent-color)' }} />
             <span>Accounts User Audits & Controls</span>
@@ -435,7 +435,7 @@ export default function AdminConsole() {
                             ...styles.roleBadge,
                             backgroundColor: u.role === 'admin' ? 'var(--accent-light)' : 'var(--bg-primary)',
                             color: u.role === 'admin' ? 'var(--accent-color)' : 'var(--text-secondary)',
-                            border: '1px solid var(--border-glass)'
+                            border: '1px solid var(--rule)'
                           }}>
                             {u.role}
                           </span>
@@ -458,7 +458,7 @@ export default function AdminConsole() {
                             <Library size={12} />
                             <span>{u.bookshelf_count} shelves</span>
                           </span>
-                          <span style={{ ...styles.statsPill, backgroundColor: 'rgba(16, 185, 129, 0.08)', color: 'var(--success-color)' }}>
+                          <span style={{ ...styles.statsPill, backgroundColor: 'color-mix(in srgb, var(--success-color) 9%, transparent)', color: 'var(--success-color)' }}>
                             <BookOpen size={12} />
                             <span>{u.book_count} books</span>
                           </span>
@@ -532,7 +532,7 @@ export default function AdminConsole() {
       {/* 🗝️ Password Reset Modal Overlay */}
       {resettingUser && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalCard} className="glass-panel">
+          <div style={styles.modalCard} className="card">
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>Password Reset Console</h3>
               <button style={styles.closeModalBtn} onClick={() => setResettingUser(null)}>
@@ -592,7 +592,7 @@ export default function AdminConsole() {
       {/* 🗑️ Cascade Deletion Safety Warning Modal (Req 38 cascade) */}
       {deletingUser && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalCard} className="glass-panel error-shake">
+          <div style={styles.modalCard} className="card error-shake">
             <div style={styles.modalHeader}>
               <h3 style={{ ...styles.modalTitle, color: 'var(--danger-color)' }}>⚠️ Permanent Cascade Deletion</h3>
               <button style={styles.closeModalBtn} onClick={() => setDeletingUser(null)}>
@@ -659,8 +659,10 @@ const styles = {
     gap: '4px',
   },
   title: {
-    fontSize: '2.25rem',
-    fontWeight: 800,
+    fontFamily: 'var(--font-display)',
+    fontSize: 'var(--step-4)',
+    fontWeight: 600,
+    letterSpacing: '-0.015em',
   },
   subtitle: {
     color: 'var(--text-secondary)',
@@ -672,7 +674,7 @@ const styles = {
     gap: '8px',
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--success-color) 11%, transparent)',
     color: 'var(--success-color)',
     fontSize: '0.85rem',
     fontWeight: '600',
@@ -683,7 +685,7 @@ const styles = {
     gap: '8px',
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
     color: 'var(--danger-color)',
     fontSize: '0.85rem',
     fontWeight: '600',
@@ -706,7 +708,7 @@ const styles = {
   cardTitle: {
     fontSize: '1.25rem',
     fontWeight: '750',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     paddingBottom: '12px',
     display: 'flex',
     alignItems: 'center',
@@ -725,7 +727,7 @@ const styles = {
     padding: '12px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     gap: '12px',
   },
   toggleName: {
@@ -760,7 +762,7 @@ const styles = {
     padding: '16px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   orphanCountVal: {
     fontSize: '2.5rem',
@@ -796,7 +798,7 @@ const styles = {
     gap: '8px',
     maxHeight: '140px',
     overflowY: 'auto',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     borderRadius: 'var(--radius-sm)',
     padding: '8px',
     backgroundColor: 'var(--bg-primary)',
@@ -806,7 +808,7 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     padding: '6px',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
   },
   previewCover: {
     width: '32px',
@@ -858,8 +860,8 @@ const styles = {
     gap: '12px',
     padding: '16px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-    border: '1px solid rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--success-color) 7%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--success-color) 11%, transparent)',
     color: 'var(--success-color)',
     fontSize: '0.85rem',
     fontWeight: '600',
@@ -867,7 +869,7 @@ const styles = {
   tableWrapper: {
     width: '100%',
     overflowX: 'auto',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
   },
@@ -878,7 +880,7 @@ const styles = {
   },
   th: {
     padding: '14px 16px',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     fontSize: '0.8rem',
     fontWeight: '800',
     color: 'var(--text-muted)',
@@ -886,7 +888,7 @@ const styles = {
     letterSpacing: '0.05em',
   },
   tr: {
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     transition: 'var(--transition-smooth)',
   },
   td: {
@@ -938,7 +940,7 @@ const styles = {
     backgroundColor: 'var(--bg-primary)',
     padding: '4px 12px',
     borderRadius: '4px',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   roleBlock: {
     display: 'flex',
@@ -992,11 +994,11 @@ const styles = {
     display: 'inline-block',
   },
   badgeActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--success-color) 11%, transparent)',
     color: 'var(--success-color)',
   },
   badgeDisabled: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
     color: 'var(--danger-color)',
   },
   actionsCell: {
@@ -1012,7 +1014,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     backgroundColor: 'var(--bg-secondary)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     transition: 'var(--transition-smooth)',
   },
   errorContainer: {
@@ -1031,13 +1033,12 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(28, 20, 12, 0.55)',
     zIndex: 200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
-    backdropFilter: 'blur(4px)',
   },
   modalCard: {
     width: '100%',
@@ -1076,16 +1077,16 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'rgba(99, 102, 241, 0.08)',
     fontSize: '0.85rem',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   dangerSummaryRow: {
     display: 'flex',
     gap: '12px',
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    backgroundColor: 'color-mix(in srgb, var(--danger-color) 9%, transparent)',
     color: 'var(--danger-color)',
-    border: '1px solid rgba(239, 68, 68, 0.15)',
+    border: '1px solid color-mix(in srgb, var(--danger-color) 18%, transparent)',
   },
   dangerSummaryTitle: {
     fontSize: '0.95rem',

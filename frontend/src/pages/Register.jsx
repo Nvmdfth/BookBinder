@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthProvider';
-import { Library, UserPlus, AlertCircle, ShieldAlert } from 'lucide-react';
+import { UserPlus, AlertCircle, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import AuthCard from '../components/AuthCard';
 
 export default function Register() {
   const { register } = useAuth();
@@ -12,24 +13,20 @@ export default function Register() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  
+
   const navigate = useNavigate();
 
   // Proactive registration switch check on boot (Req 4.4.2)
   useEffect(() => {
     async function checkRegistrationSwitch() {
       try {
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}), // Empty body triggers switch check first
-        });
-        
-        if (res.status === 403) {
-          setIsLocked(true);
-        }
+        const res = await fetch('/api/auth/registration-status');
+        const data = await res.json();
+        setIsLocked(!data.allowOpenRegistration);
       } catch (err) {
         console.warn('Registration switch check fail:', err);
+        // Fail closed rather than showing a form the API would reject
+        setIsLocked(true);
       }
     }
     checkRegistrationSwitch();
@@ -59,209 +56,176 @@ export default function Register() {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card} className="glass-panel">
-        <div style={styles.brandHeader}>
-          <Library size={44} style={styles.logo} />
-          <h1 style={styles.brandTitle}>BookBinder</h1>
-          <p style={styles.subtitle}>Physical Library Catalog Engine</p>
-        </div>
-
-        {/* 🔒 Locked Out Fallback View (Req 4.4.2) */}
-        {isLocked ? (
-          <div style={styles.lockedContainer}>
-            <ShieldAlert size={48} style={styles.lockedIcon} className="error-shake" />
-            <h2 style={styles.lockedTitle}>Registration Locked</h2>
-            <p style={styles.lockedMsg}>
-              Public registration is currently disabled on this instance. Please contact your system administrator for access.
-            </p>
-            <Link to="/login" className="btn btn-secondary" style={{ width: '100%', marginTop: '12px' }}>
-              Return to Sign In
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} style={styles.form}>
-            <h2 style={styles.title}>Register Account</h2>
-
-            {error && (
-              <div style={styles.errorBanner} className="error-shake">
-                <AlertCircle size={18} />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {success && (
-              <div style={styles.successBanner}>
-                <span>Account registered successfully! Redirecting to login...</span>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <input
-                type="email"
-                className="form-input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. library@home.com"
-                required
-                disabled={loading || success}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <input
-                type="password"
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Must be at least 6 characters"
-                required
-                disabled={loading || success}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Confirm Password</label>
-              <input
-                type="password"
-                className="form-input"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat password"
-                required
-                disabled={loading || success}
-              />
-            </div>
-
-            <button type="submit" className="btn btn-primary" style={styles.submitBtn} disabled={loading || success}>
-              <UserPlus size={20} />
-              <span>{loading ? 'Creating Account...' : 'Register'}</span>
-            </button>
-          </form>
-        )}
-
-        {!isLocked && (
-          <div style={styles.footer}>
-            <span>Already have an account?</span>
+    <AuthCard
+      accession={isLocked ? 'BB · CARD 002 · DRAWER SEALED' : 'BB · CARD 002 · NEW BORROWER'}
+      footer={
+        !isLocked && (
+          <p style={styles.footer}>
+            Already have an account?{' '}
             <Link to="/login" style={styles.footerLink}>Sign In here</Link>
+          </p>
+        )
+      }
+    >
+      {/* Locked Out Fallback View (Req 4.4.2) */}
+      {isLocked ? (
+        <div style={styles.locked}>
+          <ShieldAlert size={40} style={{ color: 'var(--warning-color)' }} className="error-shake" />
+          <span className="stamp stamp-tilt stamp-warning" style={styles.lockedStamp}>
+            Registration Closed
+          </span>
+          <p style={styles.lockedMsg}>
+            Public registration is currently disabled on this instance. Please contact your system
+            administrator for access.
+          </p>
+          <Link to="/login" className="btn btn-secondary" style={{ width: '100%', marginTop: '4px' }}>
+            Return to Sign In
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.titleRow}>
+            <h2 style={styles.title}>Register Account</h2>
+            <span className="stamp stamp-tilt stamp-muted">New Card</span>
           </div>
-        )}
-      </div>
-    </div>
+
+          {error && (
+            <div style={styles.errorBanner} className="error-shake">
+              <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div style={styles.successBanner}>
+              <CheckCircle2 size={17} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span>Account registered successfully! Redirecting to login…</span>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="register-email">Email Address</label>
+            <input
+              id="register-email"
+              type="email"
+              className="form-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="library@home.com"
+              required
+              disabled={loading || success}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="register-password">Password</label>
+            <input
+              id="register-password"
+              type="password"
+              className="form-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+              disabled={loading || success}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="register-confirm">Confirm Password</label>
+            <input
+              id="register-confirm"
+              type="password"
+              className="form-input"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat password"
+              required
+              disabled={loading || success}
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={styles.submitBtn}
+            disabled={loading || success}
+          >
+            <UserPlus size={18} />
+            <span>{loading ? 'Filing your card…' : 'Register'}</span>
+          </button>
+        </form>
+      )}
+    </AuthCard>
   );
 }
 
 const styles = {
-  container: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    width: '100vw',
-    backgroundColor: 'var(--bg-primary)',
-    padding: '20px',
-  },
-  card: {
-    width: '100%',
-    maxWidth: '440px',
-    padding: '40px 30px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    boxShadow: 'var(--shadow-lg)',
-  },
-  brandHeader: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-    gap: '4px',
-  },
-  logo: {
-    color: 'var(--accent-color)',
-    marginBottom: '8px',
-  },
-  brandTitle: {
-    fontSize: '2rem',
-    fontWeight: 850,
-    background: 'var(--accent-gradient)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-  },
-  subtitle: {
-    fontSize: '0.85rem',
-    color: 'var(--text-muted)',
-    fontWeight: '600',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-  },
   form: {
     display: 'flex',
     flexDirection: 'column',
     width: '100%',
   },
-  title: {
-    fontSize: '1.25rem',
+  titleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
     marginBottom: '20px',
-    fontWeight: '700',
+  },
+  title: {
+    fontSize: 'var(--step-2)',
+    fontWeight: 600,
   },
   submitBtn: {
-    marginTop: '8px',
+    marginTop: '4px',
     width: '100%',
   },
   errorBanner: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '8px',
-    padding: '12px 16px',
+    gap: '9px',
+    padding: '11px 14px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid var(--danger-color)',
+    background: 'color-mix(in srgb, var(--danger-color) 8%, transparent)',
     color: 'var(--danger-color)',
     fontSize: '0.85rem',
-    marginBottom: '20px',
+    marginBottom: '18px',
   },
   successBanner: {
-    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '9px',
+    padding: '11px 14px',
     borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    border: '1px solid var(--success-color)',
+    background: 'color-mix(in srgb, var(--success-color) 8%, transparent)',
     color: 'var(--success-color)',
     fontSize: '0.85rem',
-    marginBottom: '20px',
-    fontWeight: '600',
+    fontWeight: 600,
+    marginBottom: '18px',
   },
-  lockedContainer: {
+  locked: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    padding: '20px 10px',
-    gap: '16px',
+    padding: '8px 4px',
+    gap: '14px',
   },
-  lockedIcon: {
-    color: 'var(--warning-color)',
-  },
-  lockedTitle: {
-    fontSize: '1.25rem',
-    color: 'var(--text-primary)',
-    fontWeight: '750',
+  lockedStamp: {
+    fontSize: '0.72rem',
+    padding: '5px 12px',
   },
   lockedMsg: {
     fontSize: '0.9rem',
     color: 'var(--text-secondary)',
-    lineHeight: '1.6',
+    lineHeight: 1.65,
   },
   footer: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '6px',
-    fontSize: '0.9rem',
+    textAlign: 'center',
+    fontSize: '0.88rem',
     color: 'var(--text-secondary)',
-    borderTop: '1px solid var(--border-glass)',
-    paddingTop: '20px',
-  },
-  footerLink: {
-    fontWeight: '700',
   },
 };

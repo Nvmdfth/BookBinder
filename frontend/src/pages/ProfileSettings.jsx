@@ -459,7 +459,7 @@ export default function ProfileSettings() {
 
       <div style={styles.grid}>
         {/* Left Card - Avatar Upload */}
-        <div style={styles.card} className="glass-panel">
+        <div style={styles.card} className="card">
           <h2 style={styles.cardTitle}>Profile Picture</h2>
           
           <div style={styles.avatarBlock}>
@@ -478,7 +478,7 @@ export default function ProfileSettings() {
           {avatarMessage && (
             <div style={{
               ...styles.messageBanner,
-              backgroundColor: avatarMessage.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              backgroundColor: avatarMessage.type === 'success' ? 'color-mix(in srgb, var(--success-color) 11%, transparent)' : 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
               color: avatarMessage.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
             }}>
               {avatarMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
@@ -508,13 +508,13 @@ export default function ProfileSettings() {
         </div>
 
         {/* Right Card - Profile Credentials */}
-        <div style={{ ...styles.card, flex: 2 }} className="glass-panel">
+        <div style={{ ...styles.card, flex: 2 }} className="card">
           <h2 style={styles.cardTitle}>Security Details</h2>
 
           {profileMessage && (
             <div style={{
               ...styles.messageBanner,
-              backgroundColor: profileMessage.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              backgroundColor: profileMessage.type === 'success' ? 'color-mix(in srgb, var(--success-color) 11%, transparent)' : 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
               color: profileMessage.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
             }} className={profileMessage.type === 'error' ? 'error-shake' : ''}>
               {profileMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
@@ -587,7 +587,7 @@ export default function ProfileSettings() {
       </div>
 
       {/* 🎨 Theme Selection & Aesthetic Personalization Card */}
-      <div style={styles.bulkImportCard} className="glass-panel">
+      <div style={styles.bulkImportCard} className="card">
         <h2 style={styles.cardTitle}>
           <Palette size={22} style={{ color: 'var(--accent-color)', verticalAlign: 'middle', marginRight: '8px' }} />
           <span>Aesthetic Personalization</span>
@@ -633,7 +633,7 @@ export default function ProfileSettings() {
                 key={p.id}
                 style={{
                   ...styles.paletteCard,
-                  borderColor: isSelected ? 'var(--accent-color)' : 'var(--border-glass)',
+                  borderColor: isSelected ? 'var(--accent-color)' : 'var(--rule)',
                   boxShadow: isSelected ? '0 0 0 2px var(--accent-color)' : 'none',
                 }}
                 onClick={() => setPalette(p.id)}
@@ -654,7 +654,7 @@ export default function ProfileSettings() {
       </div>
 
       {/* 🚀 Bulk Catalog Ingestion Card (Req 1.3 Bulk Import) */}
-      <div style={styles.bulkImportCard} className="glass-panel">
+      <div style={styles.bulkImportCard} className="card">
         <h2 style={styles.cardTitle}>Bulk Catalog Ingestion</h2>
         <div style={styles.bulkImportContent}>
           <div style={styles.bulkImportText}>
@@ -680,7 +680,7 @@ export default function ProfileSettings() {
       {/* 🛠️ Bulk Import Console Modal Overlay (Step-by-Step UI) */}
       {isImportModalOpen && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalCard, maxWidth: importStep === 3 ? '800px' : '650px' }} className="glass-panel">
+          <div style={{ ...styles.modalCard, maxWidth: importStep === 3 ? '800px' : '650px' }} className="card">
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>
                 <FileSpreadsheet size={22} style={{ color: 'var(--accent-color)', verticalAlign: 'middle', marginRight: '8px' }} />
@@ -817,7 +817,7 @@ export default function ProfileSettings() {
                       <label className="form-label" style={styles.mapLabel}>Book Title Column *</label>
                       <select 
                         className="form-input"
-                        style={{ borderColor: fieldMappings.title ? 'var(--border-glass)' : 'var(--danger-color)' }}
+                        style={{ borderColor: fieldMappings.title ? 'var(--rule)' : 'var(--danger-color)' }}
                         value={fieldMappings.title}
                         onChange={(e) => setFieldMappings(prev => ({ ...prev, title: e.target.value }))}
                         required
@@ -971,20 +971,20 @@ export default function ProfileSettings() {
                                 </span>
                               )}
                               {status === 'success' && (
-                                <span style={{ ...styles.statusTag, backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success-color)' }}>
+                                <span style={{ ...styles.statusTag, backgroundColor: 'color-mix(in srgb, var(--success-color) 11%, transparent)', color: 'var(--success-color)' }}>
                                   <CheckCircle2 size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
                                   <span>Indexed</span>
                                 </span>
                               )}
                               {status === 'already' && (
-                                <span style={{ ...styles.statusTag, backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#d97706' }}>
+                                <span style={{ ...styles.statusTag, backgroundColor: 'color-mix(in srgb, var(--warning-color) 13%, transparent)', color: 'var(--warning-color)' }}>
                                   <MinusCircle size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
                                   <span>Already on Shelf</span>
                                 </span>
                               )}
                               {status === 'error' && (
                                 <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                  <span style={{ ...styles.statusTag, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-color)' }}>
+                                  <span style={{ ...styles.statusTag, backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)', color: 'var(--danger-color)' }}>
                                     <AlertCircle size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
                                     <span>Failed</span>
                                   </span>
@@ -1066,7 +1066,7 @@ const styles = {
   },
   settingsDivider: {
     height: '1px',
-    backgroundColor: 'var(--border-glass)',
+    backgroundColor: 'var(--rule)',
     margin: '24px 0',
   },
   settingLabel: {
@@ -1084,14 +1084,14 @@ const styles = {
     width: '100%',
   },
   paletteCard: {
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     borderRadius: 'var(--radius-md)',
     padding: '16px',
     display: 'flex',
     gap: '14px',
     alignItems: 'center',
     cursor: 'pointer',
-    backgroundColor: 'var(--bg-glass)',
+    backgroundColor: 'var(--surface-raised)',
     transition: 'all 0.3s ease',
   },
   paletteSwatches: {
@@ -1127,8 +1127,10 @@ const styles = {
     gap: '4px',
   },
   title: {
-    fontSize: '2.25rem',
-    fontWeight: 800,
+    fontFamily: 'var(--font-display)',
+    fontSize: 'var(--step-4)',
+    fontWeight: 600,
+    letterSpacing: '-0.015em',
   },
   subtitle: {
     color: 'var(--text-secondary)',
@@ -1152,7 +1154,7 @@ const styles = {
   cardTitle: {
     fontSize: '1.25rem',
     fontWeight: '750',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     paddingBottom: '12px',
   },
   avatarBlock: {
@@ -1172,13 +1174,15 @@ const styles = {
   avatarFallback: {
     width: '96px',
     height: '96px',
-    borderRadius: '50%',
+    borderRadius: 'var(--radius-sm)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'var(--accent-gradient)',
-    color: '#ffffff',
-    fontSize: '2.25rem',
+    background: 'var(--accent-color)',
+    // Reads against the accent in both themes, where flat white does not
+    color: 'var(--bg-secondary)',
+    fontFamily: 'var(--font-stamp)',
+    fontSize: '2rem',
     fontWeight: '700',
     boxShadow: 'var(--shadow-md)',
   },
@@ -1225,7 +1229,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     margin: '16px 0 12px 0',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     paddingBottom: '8px',
   },
   dividerText: {
@@ -1274,7 +1278,7 @@ const styles = {
     fontWeight: '750',
     color: 'var(--text-primary)',
     marginBottom: '12px',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     paddingBottom: '6px',
     textTransform: 'uppercase',
     letterSpacing: '0.02em',
@@ -1289,7 +1293,7 @@ const styles = {
     backgroundColor: 'var(--bg-primary)',
     padding: '16px',
     borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
@@ -1308,7 +1312,7 @@ const styles = {
     marginBottom: '16px',
   },
   dropZone: {
-    border: '2px dashed var(--border-glass)',
+    border: '2px dashed var(--rule)',
     borderRadius: 'var(--radius-md)',
     padding: '40px 20px',
     textAlign: 'center',
@@ -1358,7 +1362,7 @@ const styles = {
     backgroundColor: 'var(--bg-primary)',
     borderRadius: '4px',
     overflow: 'hidden',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
   },
   progressBarInner: {
     height: '100%',
@@ -1371,7 +1375,7 @@ const styles = {
     maxHeight: '320px',
     overflowY: 'auto',
     borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid var(--rule)',
     backgroundColor: 'var(--bg-primary)',
     marginBottom: '20px',
   },
@@ -1387,11 +1391,11 @@ const styles = {
     color: 'var(--text-secondary)',
     backgroundColor: 'var(--bg-secondary)',
     padding: '12px 16px',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
     letterSpacing: '0.05em',
   },
   queueTr: {
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid var(--rule)',
   },
   queueTd: {
     padding: '10px 16px',
@@ -1414,13 +1418,12 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(28, 20, 12, 0.55)',
     zIndex: 200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
-    backdropFilter: 'blur(4px)',
   },
   modalCard: {
     width: '100%',
