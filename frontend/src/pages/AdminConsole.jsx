@@ -1,10 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthProvider';
-import { 
-  ShieldAlert, Settings, ToggleLeft, ToggleRight, Trash2, Users, 
-  BookOpen, AlertCircle, CheckCircle, Database, RefreshCw, Key, 
+import {
+  ShieldAlert, Settings, Lock, Unlock, Trash2, Users,
+  BookOpen, AlertCircle, CheckCircle, Database, Key,
   X, Copy, UserCheck, UserMinus, ShieldCheck, Library
 } from 'lucide-react';
+
+/**
+ * An instance-wide switch, presented as a physical toggle rather than a glyph
+ * that changes shape. The lock in the knob says which way is "open" without
+ * having to read the label — this row governs who can get an account at all.
+ */
+function SettingSwitch({ name, desc, on, status, onToggle }) {
+  return (
+    <div style={styles.toggleRow}>
+      <div style={{ flex: 1, minWidth: '200px' }}>
+        <h4 style={styles.toggleName}>{name}</h4>
+        <p style={styles.toggleDesc}>{desc}</p>
+        {status && (
+          <div
+            className="typed"
+            style={{
+              ...styles.toggleStatus,
+              color: on ? 'var(--success-color)' : 'var(--text-muted)',
+            }}
+          >
+            Status · {status}
+          </div>
+        )}
+      </div>
+
+      <button
+        className={`switch${on ? ' switch-on' : ''}`}
+        role="switch"
+        aria-checked={on}
+        aria-label={name}
+        onClick={onToggle}
+      >
+        <span className="switch-knob">
+          {on ? <Unlock size={16} /> : <Lock size={16} />}
+        </span>
+      </button>
+    </div>
+  );
+}
 
 export default function AdminConsole() {
   const { user: currentUser, isAdmin } = useAuth();
@@ -276,58 +315,38 @@ export default function AdminConsole() {
           
           <div style={styles.togglesList}>
             {/* Open registration toggle switch (Req 4.4.3) */}
-            <div style={styles.toggleRow}>
-              <div>
-                <h4 style={styles.toggleName}>Open Account Registration</h4>
-                <p style={styles.toggleDesc}>Allow guest users to register accounts on this instance.</p>
-              </div>
-              <button 
-                style={styles.toggleBtn} 
-                onClick={() => handleToggleSetting('allow_open_registration', settings.allow_open_registration)}
-              >
-                {settings.allow_open_registration === 'true' ? (
-                  <ToggleRight size={44} style={{ color: 'var(--accent-color)' }} />
-                ) : (
-                  <ToggleLeft size={44} style={{ color: 'var(--text-muted)' }} />
-                )}
-              </button>
-            </div>
+            <SettingSwitch
+              name="Open Account Registration"
+              desc={
+                <>
+                  When closed, <span className="typed">/api/auth/register</span> returns 403 and the
+                  sign-up form is replaced with a contact notice.
+                </>
+              }
+              on={settings.allow_open_registration === 'true'}
+              status={
+                settings.allow_open_registration === 'true'
+                  ? 'Open — anyone may register'
+                  : 'Closed — invitation only'
+              }
+              onToggle={() =>
+                handleToggleSetting('allow_open_registration', settings.allow_open_registration)
+              }
+            />
 
-            {/* Google Books Switch */}
-            <div style={styles.toggleRow}>
-              <div>
-                <h4 style={styles.toggleName}>Enable Google Books API</h4>
-                <p style={styles.toggleDesc}>Query Google Books for ISBN lookups on barcode ingestion.</p>
-              </div>
-              <button 
-                style={styles.toggleBtn} 
-                onClick={() => handleToggleSetting('enable_google_books', settings.enable_google_books)}
-              >
-                {settings.enable_google_books === 'true' ? (
-                  <ToggleRight size={44} style={{ color: 'var(--accent-color)' }} />
-                ) : (
-                  <ToggleLeft size={44} style={{ color: 'var(--text-muted)' }} />
-                )}
-              </button>
-            </div>
+            <SettingSwitch
+              name="Enable Google Books API"
+              desc="Query Google Books for ISBN lookups on barcode ingestion."
+              on={settings.enable_google_books === 'true'}
+              onToggle={() => handleToggleSetting('enable_google_books', settings.enable_google_books)}
+            />
 
-            {/* OpenLibrary Switch */}
-            <div style={styles.toggleRow}>
-              <div>
-                <h4 style={styles.toggleName}>Enable OpenLibrary API</h4>
-                <p style={styles.toggleDesc}>Query OpenLibrary database for fallback ISBN barcode lookups.</p>
-              </div>
-              <button 
-                style={styles.toggleBtn} 
-                onClick={() => handleToggleSetting('enable_open_library', settings.enable_open_library)}
-              >
-                {settings.enable_open_library === 'true' ? (
-                  <ToggleRight size={44} style={{ color: 'var(--accent-color)' }} />
-                ) : (
-                  <ToggleLeft size={44} style={{ color: 'var(--text-muted)' }} />
-                )}
-              </button>
-            </div>
+            <SettingSwitch
+              name="Enable OpenLibrary API"
+              desc="Query OpenLibrary database for fallback ISBN barcode lookups."
+              on={settings.enable_open_library === 'true'}
+              onToggle={() => handleToggleSetting('enable_open_library', settings.enable_open_library)}
+            />
           </div>
         </div>
 
@@ -728,7 +747,14 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--bg-primary)',
     border: '1px solid var(--rule)',
-    gap: '12px',
+    gap: '16px',
+    flexWrap: 'wrap',
+  },
+  toggleStatus: {
+    marginTop: '10px',
+    fontSize: '0.66rem',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
   },
   toggleName: {
     fontSize: '0.95rem',
@@ -740,14 +766,6 @@ const styles = {
     color: 'var(--text-muted)',
     lineHeight: '1.4',
     marginTop: '2px',
-  },
-  toggleBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px',
   },
   cleaningConsole: {
     display: 'flex',

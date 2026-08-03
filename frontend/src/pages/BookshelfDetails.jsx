@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
-import { 
-  Book, MapPin, Notebook, Plus, Pencil, Trash2, Users, X, Share2, 
-  Settings, AlertTriangle, ArrowLeft, Camera, FileText, CheckCircle,
-  Search, Bookmark, Check, LayoutGrid, List
+import BookVolume from '../components/BookVolume';
+import Modal from '../components/Modal';
+import { readSetting, writeSetting } from '../utils/storage';
+import { filterBooks, sortBooks, locationsOf } from '../utils/shelf';
+import {
+  Book, MapPin, Notebook, Plus, Pencil, Trash2, X, Share2,
+  AlertTriangle, ArrowLeft, Camera, CheckCircle,
+  Search, Bookmark, Check, LayoutGrid, List, ArrowUpDown, SearchX, Package,
 } from 'lucide-react';
+
+const VIEW_MODE_KEY = 'bookbinder_view_mode';
+
+/** Sort orders offered above a shelf. */
+const SORTS = [
+  { value: 'recent', label: 'Recently added' },
+  { value: 'title', label: 'Title A→Z' },
+  { value: 'author', label: 'Author A→Z' },
+  { value: 'location', label: 'Physical location' },
+];
 
 export default function BookshelfDetails() {
   const { id } = useParams();
@@ -20,11 +34,25 @@ export default function BookshelfDetails() {
   const [prefilledIsbn, setPrefilledIsbn] = useState('');
   
   // v1.5 Grid/List View and Reassignment States
-  const [viewMode, setViewMode] = useState(localStorage.getItem('bookbinder_view_mode') || 'grid');
+  const [viewMode, setViewMode] = useState(() => readSetting(VIEW_MODE_KEY, 'grid'));
   const [writeableShelves, setWriteableShelves] = useState([]);
   const [targetBookshelfId, setTargetBookshelfId] = useState('');
   const [scanMessage, setScanMessage] = useState(null);
   const [bookSearchQuery, setBookSearchQuery] = useState('');
+
+  // Shelf criteria. Read state and physical location are the two axes anyone
+  // actually browses a home library along, so both get first-class controls
+  // rather than being buried in the free-text filter.
+  const [readFilter, setReadFilter] = useState('all'); // 'all' | 'read' | 'unread'
+  const [sortMode, setSortMode] = useState('recent');
+  const [locationFilter, setLocationFilter] = useState('');
+
+  // The catalog card for one volume, opened from the cover grid
+  const [viewingBook, setViewingBook] = useState(null);
+
+  // Volumes confirmed during the current scanning run, not yet filed
+  const [scanTray, setScanTray] = useState([]);
+  const [filingTray, setFilingTray] = useState(false);
   
   // Modal controllers
   const [editingMapping, setEditingMapping] = useState(null); // Mapping row to edit annotations
@@ -115,6 +143,7 @@ export default function BookshelfDetails() {
             publication_date: data.book.publication_date,
             physical_location: data.mapping.physical_location,
             notes: data.mapping.notes,
+            mapping_created_at: data.mapping.created_at,
             is_read: false,
           },
           ...prev.books,
@@ -197,6 +226,13 @@ export default function BookshelfDetails() {
   useEffect(() => {
     fetchShelfDetails();
     fetchWriteableShelves();
+
+    // React Router reuses this component across :id changes, so anything scoped
+    // to one shelf has to be cleared by hand. A tray left over from shelf A
+    // would otherwise offer to file A's volumes into B.
+    setScanTray([]);
+    setViewingBook(null);
+    setScanMessage(null);
   }, [id]);
 
   useEffect(() => {
@@ -233,6 +269,7 @@ export default function BookshelfDetails() {
         setManualNotes('');
         setActiveTab('manual');
         alert('ISBN lookup timed out or failed. Prefilled details redirection loaded.');
+        return 'fallback';
       } else if (!res.ok) {
         throw new Error(data.error || 'Barcode ingestion failed.');
       } else {
@@ -253,13 +290,66 @@ export default function BookshelfDetails() {
               publication_date: data.book.publication_date,
               physical_location: data.mapping.physical_location,
               notes: data.mapping.notes,
+              // Carried through so the "recently added" sort can order this row
+              // against the ones that arrived with the shelf payload
+              mapping_created_at: data.mapping.created_at,
             },
             ...prev.books,
           ],
         }));
+        return 'filed';
       }
     } catch (err) {
       setScanMessage({ type: 'error', text: err.message });
+      return 'error';
+    }
+  };
+
+  /**
+   * A volume confirmed at the camera. Nothing is written yet — it waits in the
+   * session tray until the whole run is filed, so working along a shelf is one
+   * continuous loop rather than a round trip per book.
+   */
+  const handleScanConfirm = (book) => {
+    setScanMessage(null);
+
+    if (book.isbn && shelf?.books?.some((b) => b.isbn === book.isbn)) {
+      setScanMessage({ type: 'error', text: `"${book.title}" is already on this shelf.` });
+      return;
+    }
+
+    setScanTray((prev) => {
+      // Only a real ISBN identifies a duplicate. Keying on a missing one would
+      // silently collapse two different lookups into a single tray row.
+      if (book.isbn && prev.some((t) => t.isbn === book.isbn)) return prev;
+      return [...prev, { ...book, trayId: `${book.isbn || 'no-isbn'}-${Date.now()}` }];
+    });
+  };
+
+  /** File the whole run. Sequential so a mid-run failure stops cleanly. */
+  const handleFileTray = async () => {
+    setFilingTray(true);
+    try {
+      const filed = [];
+      for (const book of scanTray) {
+        // eslint-disable-next-line no-await-in-loop
+        const outcome = await handleScanSuccess(book.isbn);
+        if (outcome !== 'filed') {
+          // A lookup that fell back to the manual form, or an outright failure,
+          // takes over the screen. Keep the rest of the run in the tray.
+          setScanTray((prev) => prev.filter((t) => !filed.includes(t.trayId)));
+          return;
+        }
+        filed.push(book.trayId);
+      }
+      setScanTray([]);
+      setScanMessage({
+        type: 'success',
+        text: `Filed ${filed.length} ${filed.length === 1 ? 'volume' : 'volumes'} into ${shelf.name}.`,
+      });
+      setActiveTab('list');
+    } finally {
+      setFilingTray(false);
     }
   };
 
@@ -304,6 +394,7 @@ export default function BookshelfDetails() {
             publication_date: data.book.publication_date,
             physical_location: data.mapping.physical_location,
             notes: data.mapping.notes,
+            mapping_created_at: data.mapping.created_at,
           },
           ...prev.books,
         ],
@@ -453,23 +544,44 @@ export default function BookshelfDetails() {
     }
   };
 
-  // Helper handling image failures
-  const handleImageError = (e) => {
-    e.target.style.display = 'none';
-    e.target.nextSibling.style.display = 'flex'; // Show high-contrast placeholder
+  // Cover-image failures are now handled inside BookVolume, which falls back to
+  // a rendered binding rather than swapping in a sibling placeholder element.
+
+  /**
+   * The distinct physical locations on this shelf, offered as filter chips.
+   *
+   * A home library's real subject headings are where things physically live —
+   * "Oak Case, Row 2" is the query someone standing in the room actually has.
+   */
+  const locations = useMemo(() => locationsOf(shelf?.books), [shelf]);
+
+  const filteredBooks = useMemo(
+    () =>
+      sortBooks(
+        filterBooks(shelf?.books, {
+          query: bookSearchQuery,
+          readFilter,
+          locationFilter,
+        }),
+        sortMode
+      ),
+    [shelf, bookSearchQuery, readFilter, locationFilter, sortMode]
+  );
+
+  /** Grid or list, remembered across shelves and sessions. */
+  const chooseViewMode = (mode) => {
+    setViewMode(mode);
+    writeSetting(VIEW_MODE_KEY, mode);
   };
 
-  const filteredBooks = shelf?.books ? shelf.books.filter((b) => {
-    const query = bookSearchQuery.toLowerCase().trim();
-    if (!query) return true;
-    return (
-      (b.title && b.title.toLowerCase().includes(query)) ||
-      (b.author && b.author.toLowerCase().includes(query)) ||
-      (b.publisher && b.publisher.toLowerCase().includes(query)) ||
-      (b.physical_location && b.physical_location.toLowerCase().includes(query)) ||
-      (b.notes && b.notes.toLowerCase().includes(query))
-    );
-  }) : [];
+  const criteriaActive =
+    bookSearchQuery.trim() !== '' || readFilter !== 'all' || locationFilter !== '';
+
+  const clearCriteria = () => {
+    setBookSearchQuery('');
+    setReadFilter('all');
+    setLocationFilter('');
+  };
 
   if (loading) {
     return (
@@ -624,18 +736,14 @@ export default function BookshelfDetails() {
 
                 return (
                   <div key={bookKey} style={styles.searchCard}>
-                    {book.cover_image_url ? (
-                      <img 
-                        src={book.cover_image_url} 
-                        alt="" 
-                        style={styles.searchCoverImg} 
-                        onError={handleImageError} 
-                      />
-                    ) : (
-                      <div style={styles.searchCoverFallback}>
-                        <Book size={20} />
-                      </div>
-                    )}
+                    <BookVolume
+                      title={book.title}
+                      author={book.author}
+                      coverUrl={book.cover_image_url}
+                      seed={book.isbn || bookKey}
+                      size="sm"
+                      style={{ width: '52px', flex: 'none' }}
+                    />
 
                     <div style={styles.searchInfo}>
                       <span style={styles.searchTitle} title={book.title}>{book.title}</span>
@@ -689,8 +797,11 @@ export default function BookshelfDetails() {
       {isCollaborator && activeTab === 'scan' && (
         <div style={styles.tabContent} className="card">
           <h2 style={styles.tabTitle}>Barcode Bar Scanner</h2>
-          <BarcodeScanner onScanSuccess={handleScanSuccess} />
-          
+          <BarcodeScanner
+            onScanSuccess={handleScanSuccess}
+            onConfirm={handleScanConfirm}
+          />
+
           {scanMessage && (
             <div style={{
               ...styles.scanMessage,
@@ -701,6 +812,76 @@ export default function BookshelfDetails() {
               <span>{scanMessage.text}</span>
             </div>
           )}
+
+          {/* Session tray — the run so far, filed in one go */}
+          <div className="card" style={styles.tray}>
+            <div style={styles.trayHead}>
+              <Package size={19} style={{ color: 'var(--accent-color)' }} />
+              <span className="eyebrow">This Session</span>
+              <div style={{ flex: 1 }} />
+              <span className="typed" style={styles.trayCount}>
+                {scanTray.length} {scanTray.length === 1 ? 'VOLUME' : 'VOLUMES'}
+              </span>
+            </div>
+
+            {scanTray.length === 0 ? (
+              <p style={styles.trayEmpty}>
+                Keep the camera on and work along the shelf — each confirmed volume drops in here.
+                <br />
+                File the whole run in one go when you&apos;re done.
+              </p>
+            ) : (
+              <>
+                {scanTray.map((t) => (
+                  <div key={t.trayId} style={styles.trayRow} className="tray-row-in">
+                    <BookVolume
+                      title={t.title}
+                      author={t.author}
+                      coverUrl={t.cover_image_url}
+                      seed={t.isbn}
+                      size="sm"
+                      style={{ width: '26px', flex: 'none' }}
+                    />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={styles.trayTitle}>{t.title}</div>
+                      <div style={styles.trayAuthor}>{t.author || 'Unknown author'}</div>
+                    </div>
+                    <button
+                      style={styles.trayRemove}
+                      onClick={() => setScanTray((prev) => prev.filter((x) => x.trayId !== t.trayId))}
+                      title="Take back out of the tray"
+                      disabled={filingTray}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+
+                <div style={styles.trayActions}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setScanTray([])}
+                    disabled={filingTray}
+                  >
+                    <span>Undo all</span>
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={handleFileTray}
+                    disabled={filingTray}
+                  >
+                    <Plus size={18} />
+                    <span>
+                      {filingTray
+                        ? 'Filing…'
+                        : `File ${scanTray.length} into ${shelf.name}`}
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -835,64 +1016,104 @@ export default function BookshelfDetails() {
       {activeTab === 'list' && (
         <div style={styles.booksSection}>
           {shelf.books.length > 0 && (
-            <div style={styles.controlsRow}>
-              <div style={styles.searchFilterWrapper}>
-                <Search size={16} style={styles.searchIcon} />
-                <input
-                  type="text"
-                  placeholder="Filter by title, author, location..."
-                  value={bookSearchQuery}
-                  onChange={(e) => setBookSearchQuery(e.target.value)}
-                  style={styles.searchFilterInput}
-                />
-                {bookSearchQuery && (
-                  <button 
-                    style={styles.clearSearchBtn} 
-                    onClick={() => setBookSearchQuery('')}
-                    title="Clear filter"
-                  >
-                    <X size={14} />
-                  </button>
+            <>
+              <div className="filter-bar">
+                <div className="filter-row">
+                  <div className="field field-grow">
+                    <Search size={19} style={{ flexShrink: 0 }} />
+                    <input
+                      type="text"
+                      placeholder="Filter by title, author, location…"
+                      value={bookSearchQuery}
+                      onChange={(e) => setBookSearchQuery(e.target.value)}
+                      aria-label="Filter this shelf"
+                    />
+                    {bookSearchQuery && (
+                      <button
+                        style={styles.clearSearchBtn}
+                        onClick={() => setBookSearchQuery('')}
+                        title="Clear filter"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="seg" role="group" aria-label="Read status">
+                    {['all', 'read', 'unread'].map((mode) => (
+                      <button
+                        key={mode}
+                        className={`seg-btn${readFilter === mode ? ' seg-btn-active' : ''}`}
+                        onClick={() => setReadFilter(mode)}
+                        aria-pressed={readFilter === mode}
+                      >
+                        {mode === 'all' ? 'All' : mode === 'read' ? 'Read' : 'Unread'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="field">
+                    <ArrowUpDown size={18} style={{ flexShrink: 0 }} />
+                    <select
+                      value={sortMode}
+                      onChange={(e) => setSortMode(e.target.value)}
+                      aria-label="Sort order"
+                    >
+                      {SORTS.map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="seg" style={{ marginLeft: 'auto' }} role="group" aria-label="View mode">
+                    <button
+                      className={`seg-btn${viewMode === 'grid' ? ' seg-btn-active' : ''}`}
+                      onClick={() => chooseViewMode('grid')}
+                      title="Grid View"
+                      aria-pressed={viewMode === 'grid'}
+                    >
+                      <LayoutGrid size={16} />
+                    </button>
+                    <button
+                      className={`seg-btn${viewMode === 'list' ? ' seg-btn-active' : ''}`}
+                      onClick={() => chooseViewMode('list')}
+                      title="List View"
+                      aria-pressed={viewMode === 'list'}
+                    >
+                      <List size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Physical locations, as catalog subject chips */}
+                {locations.length > 0 && (
+                  <div className="chip-row">
+                    <button
+                      className={`chip${locationFilter === '' ? ' chip-active' : ''}`}
+                      onClick={() => setLocationFilter('')}
+                    >
+                      All locations
+                    </button>
+                    {locations.map((loc) => (
+                      <button
+                        key={loc}
+                        className={`chip${locationFilter === loc ? ' chip-active' : ''}`}
+                        onClick={() => setLocationFilter(loc)}
+                      >
+                        {loc}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              <div style={styles.rightControls}>
-                <span style={styles.booksCount}>
-                  {bookSearchQuery.trim() !== ''
-                    ? `Showing ${filteredBooks.length} of ${shelf.books.length}`
-                    : `${shelf.books.length} ${shelf.books.length === 1 ? 'Book' : 'Books'}`}
+              <div className="count-line">
+                <span>
+                  Showing {filteredBooks.length} of {shelf.books.length}{' '}
+                  {shelf.books.length === 1 ? 'volume' : 'volumes'}
                 </span>
-                
-                <div style={styles.toggleGroup} className="card">
-                  <button
-                    style={{
-                      ...styles.toggleBtn,
-                      ...(viewMode === 'grid' ? styles.toggleBtnActive : {})
-                    }}
-                    onClick={() => {
-                      setViewMode('grid');
-                      localStorage.setItem('bookbinder_view_mode', 'grid');
-                    }}
-                    title="Grid View"
-                  >
-                    <LayoutGrid size={16} />
-                  </button>
-                  <button
-                    style={{
-                      ...styles.toggleBtn,
-                      ...(viewMode === 'list' ? styles.toggleBtnActive : {})
-                    }}
-                    onClick={() => {
-                      setViewMode('list');
-                      localStorage.setItem('bookbinder_view_mode', 'list');
-                    }}
-                    title="List View"
-                  >
-                    <List size={16} />
-                  </button>
-                </div>
               </div>
-            </div>
+            </>
           )}
 
           {shelf.books.length === 0 ? (
@@ -909,105 +1130,58 @@ export default function BookshelfDetails() {
             </div>
           ) : filteredBooks.length === 0 ? (
             <div style={styles.emptyBooks} className="card">
-              <Search size={48} style={{ color: 'var(--text-muted)' }} />
-              <h3>No Matches Found</h3>
-              <p>No books in this library shelf match your filter criteria: "{bookSearchQuery}"</p>
-              <button className="btn btn-secondary" onClick={() => setBookSearchQuery('')}>
-                <span>Clear Search Filter</span>
+              <SearchX size={40} style={{ color: 'var(--text-muted)' }} />
+              <h3>Nothing filed under that</h3>
+              <p>No volumes on this shelf match the current criteria. Try clearing them.</p>
+              <button className="btn btn-secondary" onClick={clearCriteria}>
+                <span>Clear filters</span>
               </button>
             </div>
           ) : viewMode === 'grid' ? (
-            <div style={styles.booksGrid}>
+            /* The catalog grid. Every volume is bound rather than reduced to a
+               placeholder glyph, so a shelf with no cover art still reads as
+               books — see components/BookVolume.jsx. */
+            <div className="cover-grid">
               {filteredBooks.map((b) => (
-                <div key={b.mapping_id} style={styles.bookCard} className="card">
-                  {/* Book Cover Container */}
-                  <div style={styles.coverWrapper}>
-                    {b.cover_image_url ? (
-                      <img 
-                        src={b.cover_image_url} 
-                        alt={b.title} 
-                        style={styles.coverImg}
-                        onError={handleImageError} 
-                      />
-                    ) : null}
-                    
-                    {/* Glassmorphic Fallback cover icon if image is missing/broken */}
-                    <div style={{
-                      ...styles.coverFallback,
-                      display: b.cover_image_url ? 'none' : 'flex'
-                    }}>
-                      <Book size={32} />
-                    </div>
-                  </div>
+                /* The cell is a wrapper, not a button: the read toggle sits on
+                   top of the cover and a button cannot legally nest inside
+                   another one. Marking a book read is the most common action on
+                   a shelf and should not cost open/toggle/close. */
+                <div key={b.mapping_id} className="cover-cell card-in">
+                  <button
+                    className="cover-open"
+                    onClick={() => setViewingBook(b.mapping_id)}
+                    title={b.title}
+                  >
+                    <BookVolume
+                      title={b.title}
+                      author={b.author}
+                      coverUrl={b.cover_image_url}
+                      seed={b.isbn || b.mapping_id}
+                      /* When the toggle is rendered it *is* the indicator;
+                         a viewer with no toggle still needs the static mark */
+                      isRead={b.is_read && !isCollaborator}
+                    />
+                    <span className="cover-caption">
+                      <span className="cover-caption-title">{b.title}</span>
+                      <span className="cover-caption-sub">{b.author || 'Unknown author'}</span>
+                      {b.physical_location && (
+                        <span className="cover-caption-loc">{b.physical_location}</span>
+                      )}
+                    </span>
+                  </button>
 
-                  {/* Book details context */}
-                  <div style={styles.bookDetails}>
-                    <div style={styles.bookTitleHeader}>
-                      <h3 style={styles.bookTitle} title={b.title}>{b.title}</h3>
-                      
-                      {/* Read / Unread toggle indicator badge (Req 1.2 Read Status) */}
-                      <button
-                        style={{
-                          ...styles.readStatusBadge,
-                          ...(b.is_read ? styles.readBadgeActive : styles.readBadgeInactive),
-                          cursor: isCollaborator ? 'pointer' : 'default',
-                        }}
-                        onClick={() => isCollaborator && handleToggleReadStatus(b)}
-                        title={isCollaborator ? `Mark as ${b.is_read ? 'unread' : 'read'}` : `Book is ${b.is_read ? 'read' : 'unread'}`}
-                        disabled={!isCollaborator}
-                      >
-                        {b.is_read ? <CheckCircle size={10} style={{ color: 'var(--success-color)' }} /> : <Bookmark size={10} />}
-                        <span>{b.is_read ? 'Read' : 'Unread'}</span>
-                      </button>
-                    </div>
-                    <span style={styles.bookAuthor}>{b.author}</span>
-                    
-                    <div style={styles.metaRow}>
-                      {b.publisher && <span style={styles.metaPill} title={b.publisher}>{b.publisher}</span>}
-                      {b.page_count && <span style={styles.metaPill}>{b.page_count} pages</span>}
-                    </div>
-
-                    {/* Mapped physical location pill (Req 4.2.3) */}
-                    {b.physical_location && (
-                      <div style={styles.locationBlock}>
-                        <MapPin size={14} style={{ color: 'var(--accent-color)' }} />
-                        <span style={styles.locationText} title={b.physical_location}>{b.physical_location}</span>
-                      </div>
-                    )}
-
-                    {/* Mapped notes section */}
-                    {b.notes && (
-                      <div style={styles.notesBlock}>
-                        <Notebook size={14} style={{ color: 'var(--text-muted)' }} />
-                        <p style={styles.notesText}>{b.notes}</p>
-                      </div>
-                    )}
-
-                    {/* 🔒 Hover mutations triggers (Hides edit/remove buttons if View-only) (Req 4.3.2) */}
-                    {isCollaborator && (
-                      <div style={styles.cardActions}>
-                        <button 
-                          style={styles.cardActionBtn} 
-                          onClick={() => {
-                            setEditingMapping(b);
-                            setEditLocation(b.physical_location || '');
-                            setEditNotes(b.notes || '');
-                            setTargetBookshelfId('');
-                          }}
-                          title="Edit location & notes"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button 
-                          style={{ ...styles.cardActionBtn, color: 'var(--danger-color)' }} 
-                          onClick={() => handleDeleteMapping(b.mapping_id)}
-                          title="Remove book from shelf"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  {isCollaborator && (
+                    <button
+                      className={`cover-read${b.is_read ? ' cover-read-on' : ''}`}
+                      onClick={() => handleToggleReadStatus(b)}
+                      aria-pressed={b.is_read}
+                      aria-label={`${b.title} — mark as ${b.is_read ? 'unread' : 'read'}`}
+                      title={`Mark as ${b.is_read ? 'unread' : 'read'}`}
+                    >
+                      {b.is_read ? <CheckCircle size={16} /> : <Bookmark size={16} />}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -1016,23 +1190,14 @@ export default function BookshelfDetails() {
               {filteredBooks.map((b) => (
                 <div key={b.mapping_id} style={styles.listRow} className="card">
                   {/* Row cover thumbnail */}
-                  <div style={styles.rowCoverWrapper}>
-                    {b.cover_image_url ? (
-                      <img 
-                        src={b.cover_image_url} 
-                        alt="" 
-                        style={styles.rowCoverImg}
-                        onError={handleImageError} 
-                      />
-                    ) : null}
-                    
-                    <div style={{
-                      ...styles.rowCoverFallback,
-                      display: b.cover_image_url ? 'none' : 'flex'
-                    }}>
-                      <Book size={18} />
-                    </div>
-                  </div>
+                  <BookVolume
+                    title={b.title}
+                    author={b.author}
+                    coverUrl={b.cover_image_url}
+                    seed={b.isbn || b.mapping_id}
+                    size="sm"
+                    style={{ width: '42px', flex: 'none' }}
+                  />
 
                   {/* Row content details */}
                   <div style={styles.rowContent}>
@@ -1114,17 +1279,140 @@ export default function BookshelfDetails() {
         </div>
       )}
 
+      {/* 📇 Catalog card for a single volume */}
+      {viewingBook !== null && (() => {
+        // Resolved from the live shelf rather than held in state, so a read
+        // toggle or an annotation save is reflected here without a second copy
+        const b = shelf.books.find((x) => x.mapping_id === viewingBook);
+        if (!b) return null;
+
+        const meta = [
+          ['Author', b.author],
+          ['Publisher', b.publisher],
+          ['Published', b.publication_date],
+          ['Extent', b.page_count ? `${b.page_count} pages` : null],
+          ['ISBN', b.isbn],
+          ['Shelf', shelf.name],
+        ].filter(([, v]) => v);
+
+        return (
+          <Modal
+            onClose={() => setViewingBook(null)}
+            labelledBy="catalog-card-title"
+            width="840px"
+            style={{ padding: '26px 28px 30px' }}
+          >
+              <div style={styles.bookSheetGrid}>
+                <div>
+                  <BookVolume
+                    title={b.title}
+                    author={b.author}
+                    coverUrl={b.cover_image_url}
+                    seed={b.isbn || b.mapping_id}
+                    size="lg"
+                  />
+                  {!b.cover_image_url && (
+                    <p className="typed" style={styles.bindingNote}>
+                      No cover art on file · binding rendered
+                    </p>
+                  )}
+                </div>
+
+                <div style={{ minWidth: 0 }}>
+                  <span className="eyebrow">Catalog Card</span>
+                  <h1 id="catalog-card-title" style={styles.bookSheetTitle}>{b.title}</h1>
+                  <p style={styles.bookSheetAuthor}>{b.author || 'Unknown author'}</p>
+
+                  <div style={styles.bookSheetStatus}>
+                    <button
+                      className="stamp stamp-tilt"
+                      style={{
+                        ...styles.readToggle,
+                        color: b.is_read ? 'var(--success-color)' : 'var(--text-muted)',
+                        cursor: isCollaborator ? 'pointer' : 'default',
+                      }}
+                      onClick={() => isCollaborator && handleToggleReadStatus(b)}
+                      disabled={!isCollaborator}
+                      title={isCollaborator ? `Mark as ${b.is_read ? 'unread' : 'read'}` : undefined}
+                    >
+                      {b.is_read ? <CheckCircle size={15} /> : <Bookmark size={15} />}
+                      {b.is_read ? 'Read' : 'Unread'}
+                    </button>
+                  </div>
+
+                  <hr className="rule-double" style={{ margin: '20px 0 0' }} />
+                  {meta.map(([k, v]) => (
+                    <div key={k} style={styles.metaRowLine}>
+                      <span style={styles.metaKey}>{k}</span>
+                      <span className="typed" style={styles.metaValue}>{v}</span>
+                    </div>
+                  ))}
+
+                  {/* Physical location (Req 4.2.3) — the whole point of the app */}
+                  <div className="card card-spine" style={styles.locationCard}>
+                    <div style={styles.locationCardHead}>
+                      <MapPin size={18} style={{ color: 'var(--accent-color)' }} />
+                      <span className="eyebrow" style={{ color: 'var(--accent-color)' }}>
+                        Physical Location
+                      </span>
+                    </div>
+                    <p style={styles.locationCardValue}>
+                      {b.physical_location || 'Not recorded yet.'}
+                    </p>
+                  </div>
+
+                  <div className="card" style={styles.notesCard}>
+                    <div style={styles.locationCardHead}>
+                      <Notebook size={18} style={{ color: 'var(--text-muted)' }} />
+                      <span className="eyebrow">Annotations</span>
+                    </div>
+                    <p style={styles.notesCardValue}>
+                      {b.notes || 'No annotations filed against this copy.'}
+                    </p>
+                  </div>
+
+                  {isCollaborator && (
+                    <div style={styles.bookSheetActions}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setEditingMapping(b);
+                          setEditLocation(b.physical_location || '');
+                          setEditNotes(b.notes || '');
+                          setTargetBookshelfId('');
+                          setViewingBook(null);
+                        }}
+                      >
+                        <Pencil size={17} />
+                        <span>Edit &amp; move</span>
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ color: 'var(--danger-color)' }}
+                        onClick={() => {
+                          setViewingBook(null);
+                          handleDeleteMapping(b.mapping_id);
+                        }}
+                      >
+                        <Trash2 size={17} />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+          </Modal>
+        );
+      })()}
+
       {/* 🛠️ Edit Annotations Modal */}
       {editingMapping && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard} className="card">
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Update Book Mapping</h3>
-              <button style={styles.closeModalBtn} onClick={() => setEditingMapping(null)}>
-                <X size={20} />
-              </button>
-            </div>
-
+        <Modal
+          onClose={() => setEditingMapping(null)}
+          eyebrow="Shelf Mapping"
+          title="Update Book Mapping"
+          busy={actionLoading}
+        >
             <form onSubmit={handleUpdateAnnotations} style={styles.modalForm}>
               <div style={styles.bookSummaryRow}>
                 <Book size={20} style={{ color: 'var(--accent-color)' }} />
@@ -1183,21 +1471,18 @@ export default function BookshelfDetails() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* 👥 Owner-Only Sharing Modal Portal */}
       {isShareModalOpen && shelf.isOwner && (
-        <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalCard, maxWidth: '600px' }} className="card">
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Bookshelf Share Console</h3>
-              <button style={styles.closeModalBtn} onClick={() => setIsShareModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
+        <Modal
+          onClose={() => setIsShareModalOpen(false)}
+          eyebrow="Access Control"
+          title="Bookshelf Share Console"
+          width="600px"
+          busy={shareLoading}
+        >
             {/* Invite Form */}
             <form onSubmit={handleInviteShare} style={styles.shareInviteForm}>
               <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
@@ -1268,8 +1553,7 @@ export default function BookshelfDetails() {
                 Close
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -1420,75 +1704,6 @@ const styles = {
     gap: '16px',
     color: 'var(--text-secondary)',
   },
-  booksGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '20px',
-  },
-  bookCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    borderRadius: 'var(--radius-md)',
-    overflow: 'hidden',
-    border: '1px solid var(--rule)',
-    backgroundColor: 'var(--surface-raised)',
-    position: 'relative',
-    transition: 'var(--transition-smooth)',
-  },
-  coverWrapper: {
-    width: '100%',
-    aspectRatio: '0.7',
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    borderBottom: '1px solid var(--rule)',
-  },
-  coverImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  coverFallback: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'var(--text-muted)',
-    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--rule) 100%)',
-  },
-  bookDetails: {
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    flex: 1,
-  },
-  bookTitle: {
-    fontSize: '1rem',
-    fontWeight: '750',
-    color: 'var(--text-primary)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: '-webkit-box',
-    WebkitLineClamp: '2',
-    WebkitBoxOrient: 'vertical',
-    lineHeight: '1.4',
-  },
-  bookAuthor: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
-    fontWeight: '600',
-  },
-  metaRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-  },
   metaPill: {
     fontSize: '0.7rem',
     fontWeight: '700',
@@ -1521,34 +1736,6 @@ const styles = {
     whiteSpace: 'nowrap',
     maxWidth: '180px',
   },
-  notesBlock: {
-    display: 'flex',
-    gap: '6px',
-    padding: '10px',
-    borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--rule)',
-    marginTop: '4px',
-  },
-  notesText: {
-    fontSize: '0.75rem',
-    color: 'var(--text-secondary)',
-    lineHeight: '1.4',
-    fontStyle: 'italic',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: '-webkit-box',
-    WebkitLineClamp: '3',
-    WebkitBoxOrient: 'vertical',
-  },
-  cardActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    marginTop: 'auto',
-    paddingTop: '8px',
-    borderTop: '1px solid var(--rule)',
-  },
   cardActionBtn: {
     background: 'none',
     border: 'none',
@@ -1559,9 +1746,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     transition: 'var(--transition-smooth)',
-  },
-  cardActionBtnHover: {
-    backgroundColor: 'var(--rule)',
   },
   badge: {
     fontSize: '0.7rem',
@@ -1593,42 +1777,170 @@ const styles = {
     maxWidth: '500px',
     margin: '40px auto',
   },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(28, 20, 12, 0.55)',
-    zIndex: 200,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-  },
-  modalCard: {
+
+  /* --- Bulk scanning session tray --- */
+  tray: {
     width: '100%',
     maxWidth: '500px',
-    padding: '30px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-    boxShadow: 'var(--shadow-lg)',
+    alignSelf: 'center',
+    marginTop: '18px',
+    overflow: 'hidden',
+    boxShadow: 'var(--shadow-md)',
   },
-  modalHeader: {
+  trayHead: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: '9px',
+    padding: '13px 16px',
+    borderBottom: '1px solid var(--rule)',
   },
-  modalTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '750',
+  trayCount: {
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    letterSpacing: '0.1em',
+    color: 'var(--text-primary)',
+    whiteSpace: 'nowrap',
   },
-  closeModalBtn: {
+  trayEmpty: {
+    padding: '24px 18px',
+    textAlign: 'center',
+    fontSize: '0.82rem',
+    color: 'var(--text-muted)',
+    lineHeight: 1.6,
+  },
+  trayRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px 16px',
+    borderBottom: '1px dotted var(--rule)',
+  },
+  trayTitle: {
+    fontFamily: 'var(--font-display)',
+    fontSize: '0.88rem',
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  trayAuthor: {
+    fontSize: '0.72rem',
+    color: 'var(--text-muted)',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  trayRemove: {
     background: 'none',
     border: 'none',
-    color: 'var(--text-secondary)',
+    color: 'var(--text-muted)',
     cursor: 'pointer',
+    padding: '8px',
+    flex: 'none',
+  },
+  trayActions: {
+    display: 'flex',
+    gap: '10px',
+    padding: '13px 16px',
+  },
+
+  /* --- The catalog card for one volume --- */
+  bookSheetGrid: {
+    display: 'grid',
+    // Collapses to a single column on a phone without a second breakpoint
+    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+    gap: '28px',
+    alignItems: 'start',
+  },
+  bindingNote: {
+    marginTop: '10px',
+    fontSize: '0.62rem',
+    letterSpacing: '0.09em',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+    textAlign: 'center',
+  },
+  bookSheetTitle: {
+    margin: '6px 0 0',
+    fontFamily: 'var(--font-display)',
+    fontSize: 'var(--step-3)',
+    fontWeight: 600,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.15,
+  },
+  bookSheetAuthor: {
+    margin: '7px 0 0',
+    fontFamily: 'var(--font-display)',
+    fontStyle: 'italic',
+    fontSize: '1.05rem',
+    color: 'var(--text-secondary)',
+  },
+  bookSheetStatus: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+    marginTop: '15px',
+  },
+  readToggle: {
+    background: 'transparent',
+    minHeight: '38px',
+    padding: '0 14px',
+    fontSize: '0.68rem',
+  },
+  metaRowLine: {
+    display: 'flex',
+    gap: '14px',
+    padding: '11px 2px',
+    borderBottom: '1px dotted var(--rule)',
+  },
+  metaKey: {
+    width: '108px',
+    flex: 'none',
+    fontSize: '0.63rem',
+    fontWeight: 700,
+    letterSpacing: '0.13em',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+    paddingTop: '2px',
+  },
+  metaValue: {
+    fontSize: '0.82rem',
+    color: 'var(--text-primary)',
+    wordBreak: 'break-word',
+  },
+  locationCard: {
+    marginTop: '22px',
+    padding: '15px 17px 15px 20px',
+    background: 'var(--accent-light)',
+  },
+  locationCardHead: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  locationCardValue: {
+    margin: '7px 0 0',
+    fontFamily: 'var(--font-display)',
+    fontSize: '1.05rem',
+    color: 'var(--text-primary)',
+  },
+  notesCard: {
+    marginTop: '14px',
+    padding: '15px 17px',
+  },
+  notesCardValue: {
+    margin: '8px 0 0',
+    fontFamily: 'var(--font-display)',
+    fontStyle: 'italic',
+    fontSize: '0.94rem',
+    lineHeight: 1.6,
+    color: 'var(--text-secondary)',
+  },
+  bookSheetActions: {
+    display: 'flex',
+    gap: '9px',
+    marginTop: '18px',
+    flexWrap: 'wrap',
   },
   modalForm: {
     display: 'flex',
@@ -1715,13 +2027,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
   },
-  bookTitleHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '8px',
-    width: '100%',
-  },
   readStatusBadge: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -1772,25 +2077,6 @@ const styles = {
     backgroundColor: 'var(--bg-secondary)',
     alignItems: 'center',
     width: '100%',
-  },
-  searchCoverImg: {
-    width: '60px',
-    height: '84px',
-    objectFit: 'cover',
-    borderRadius: 'var(--radius-xs)',
-    boxShadow: 'var(--shadow-sm)',
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  searchCoverFallback: {
-    width: '60px',
-    height: '84px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 'var(--radius-xs)',
-    backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--rule)',
-    color: 'var(--text-muted)',
   },
   searchInfo: {
     display: 'flex',
@@ -1857,43 +2143,6 @@ const styles = {
     width: '100%',
     borderRadius: 'var(--radius-sm)',
   },
-  controlsRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-    width: '100%',
-  },
-  booksCount: {
-    fontSize: '0.9rem',
-    fontWeight: '700',
-    color: 'var(--text-secondary)',
-  },
-  toggleGroup: {
-    display: 'flex',
-    padding: '3px',
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--rule)',
-    backgroundColor: 'var(--surface-raised)',
-    gap: '2px',
-  },
-  toggleBtn: {
-    background: 'none',
-    border: 'none',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    padding: '6px 10px',
-    borderRadius: 'var(--radius-xs)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'var(--transition-smooth)',
-  },
-  toggleBtnActive: {
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--accent-color)',
-    boxShadow: 'var(--shadow-sm)',
-  },
   booksList: {
     display: 'flex',
     flexDirection: 'column',
@@ -1910,33 +2159,6 @@ const styles = {
     backgroundColor: 'var(--surface-raised)',
     gap: '16px',
     transition: 'var(--transition-smooth)',
-  },
-  rowCoverWrapper: {
-    width: '35px',
-    height: '50px',
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: '4px',
-    border: '1px solid var(--rule)',
-    flexShrink: 0,
-  },
-  rowCoverImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  rowCoverFallback: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'var(--text-muted)',
-    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--rule) 100%)',
   },
   rowContent: {
     display: 'flex',
@@ -2016,31 +2238,6 @@ const styles = {
     alignItems: 'center',
     flexShrink: 0,
   },
-  searchFilterWrapper: {
-    display: 'flex',
-    alignItems: 'center',
-    position: 'relative',
-    backgroundColor: 'var(--surface-raised)',
-    border: '1px solid var(--rule)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '0 12px',
-    height: '38px',
-    width: '100%',
-    maxWidth: '300px',
-  },
-  searchFilterInput: {
-    background: 'none',
-    border: 'none',
-    color: 'var(--text-primary)',
-    fontSize: '0.85rem',
-    marginLeft: '8px',
-    width: '100%',
-    outline: 'none',
-  },
-  searchIcon: {
-    color: 'var(--text-secondary)',
-    flexShrink: 0,
-  },
   clearSearchBtn: {
     background: 'none',
     border: 'none',
@@ -2052,10 +2249,5 @@ const styles = {
     justifyContent: 'center',
     borderRadius: '50%',
     transition: 'var(--transition-smooth)',
-  },
-  rightControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
   },
 };

@@ -1,14 +1,31 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthProvider';
 import { useTheme } from '../context/ThemeProvider';
-import { BookMarked, User, ShieldAlert, Sun, Moon, LogOut } from 'lucide-react';
+import { readSetting, writeSetting } from '../utils/storage';
+import {
+  BookMarked, User, ShieldAlert, Sun, Moon, LogOut,
+  PanelLeftClose, PanelLeftOpen,
+} from 'lucide-react';
+
+const RAIL_KEY = 'bookbinder_nav_collapsed';
 
 export default function Layout({ children }) {
   const { user, logout, isAdmin } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // The rail state outlives the session: someone working at 500 volumes wants
+  // the cover space back permanently, not once per page load.
+  const [collapsed, setCollapsed] = useState(() => readSetting(RAIL_KEY) === 'true');
+
+  const toggleRail = () => {
+    setCollapsed((prev) => {
+      writeSetting(RAIL_KEY, !prev);
+      return !prev;
+    });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -22,84 +39,101 @@ export default function Layout({ children }) {
   };
 
   const menuItems = [
-    { name: 'Catalog', path: '/', icon: <BookMarked size={20} /> },
-    { name: 'Profile', path: '/profile', icon: <User size={20} /> },
+    { name: 'Catalog', path: '/', icon: <BookMarked size={21} /> },
+    { name: 'Profile', path: '/profile', icon: <User size={21} /> },
   ];
 
   // Admin console route mount (Req 4.4.3)
   if (isAdmin) {
-    menuItems.push({ name: 'Admin', path: '/admin', icon: <ShieldAlert size={20} /> });
+    menuItems.push({ name: 'Admin', path: '/admin', icon: <ShieldAlert size={21} /> });
   }
 
   const isActiveRoute = (path) => location.pathname === path;
 
-  const brand = (compact = false) => (
-    <div style={styles.brand}>
-      <BookMarked size={compact ? 20 : 24} style={{ color: 'var(--accent-color)' }} />
-      <div style={styles.brandText}>
-        <span style={{ ...styles.brandName, fontSize: compact ? '1.05rem' : '1.3rem' }}>
-          BookBinder
-        </span>
-        {!compact && <span className="eyebrow" style={styles.brandSub}>Home Catalog</span>}
+  const avatar = (size) =>
+    user?.avatarUrl ? (
+      <img src={user.avatarUrl} alt="" style={{ ...styles.avatarImg, width: size, height: size }} />
+    ) : (
+      <div style={{ ...styles.avatarFallback, width: size, height: size }}>
+        {getInitials(user?.email)}
       </div>
-    </div>
-  );
+    );
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${collapsed ? ' app-shell-rail' : ''}`}>
       {/* Desktop sidebar */}
       <aside className="app-sidebar">
-        {brand()}
-
-        <hr className="rule-double" />
-
-        {/* Borrower card */}
-        <div style={styles.userCard}>
-          {user?.avatarUrl ? (
-            <img src={user.avatarUrl} alt="" style={styles.avatarImg} />
-          ) : (
-            <div style={styles.avatarFallback}>{getInitials(user?.email)}</div>
+        <div className="nav-brand">
+          <BookMarked size={26} style={{ color: 'var(--accent-color)', flexShrink: 0 }} />
+          {!collapsed && (
+            <div style={styles.brandText}>
+              <span style={styles.brandName}>BookBinder</span>
+              <span className="typed" style={styles.brandSub}>Home Catalog</span>
+            </div>
           )}
-          <div style={styles.userInfo}>
-            <span style={styles.userEmail} title={user?.email}>{user?.email}</span>
-            <span className="stamp stamp-muted" style={styles.roleStamp}>{user?.role}</span>
-          </div>
         </div>
 
+        <hr className="rule-double" style={{ margin: '16px 4px 14px' }} />
+
         <nav style={styles.navMenu}>
-          <span className="eyebrow" style={styles.navHeading}>Sections</span>
           {menuItems.map((item) => (
             <Link
               key={item.name}
               to={item.path}
+              title={item.name}
               className={`nav-link${isActiveRoute(item.path) ? ' nav-link-active' : ''}`}
             >
               {item.icon}
-              <span>{item.name}</span>
+              <span className="nav-label">{item.name}</span>
             </Link>
           ))}
         </nav>
 
-        <div style={styles.sidebarFooter}>
-          <button className="btn btn-ghost" style={styles.footerBtn} onClick={toggleTheme}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
-            <span>{isDark ? 'Daylight' : 'Reading Lamp'}</span>
+        <div className="nav-footer">
+          <button
+            className="nav-footer-btn"
+            onClick={toggleRail}
+            title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+            <span className="nav-label">Collapse</span>
+          </button>
+
+          <button className="nav-footer-btn" onClick={toggleTheme} title="Switch theme">
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+            <span className="nav-label">{isDark ? 'Daylight' : 'Reading Lamp'}</span>
           </button>
 
           <button
-            className="btn btn-ghost"
-            style={{ ...styles.footerBtn, color: 'var(--danger-color)' }}
+            className="nav-footer-btn"
+            style={{ color: 'var(--danger-color)' }}
             onClick={handleLogout}
+            title="Sign out"
           >
-            <LogOut size={18} />
-            <span>Sign Out</span>
+            <LogOut size={20} />
+            <span className="nav-label">Sign Out</span>
           </button>
+
+          {/* Borrower card */}
+          <div className="nav-user">
+            {avatar('32px')}
+            {!collapsed && (
+              <div style={styles.userInfo}>
+                <span style={styles.userEmail} title={user?.email}>{user?.email}</span>
+                <span className="typed" style={styles.userRole}>{user?.role}</span>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
       {/* Mobile header */}
       <header className="app-mobile-header">
-        {brand(true)}
+        <div style={styles.brand}>
+          <BookMarked size={23} style={{ color: 'var(--accent-color)' }} />
+          <span style={{ ...styles.brandName, fontSize: '1.06rem' }}>BookBinder</span>
+        </div>
         <div style={styles.mobileActions}>
           <button
             className="btn btn-ghost"
@@ -107,7 +141,7 @@ export default function Layout({ children }) {
             onClick={toggleTheme}
             aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
           >
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            {isDark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
           <button
             className="btn btn-ghost"
@@ -115,7 +149,7 @@ export default function Layout({ children }) {
             onClick={handleLogout}
             aria-label="Sign out"
           >
-            <LogOut size={18} />
+            <LogOut size={19} />
           </button>
         </div>
       </header>
@@ -150,39 +184,30 @@ const styles = {
   brandText: {
     display: 'flex',
     flexDirection: 'column',
-    lineHeight: 1.15,
+    lineHeight: 1.1,
+    whiteSpace: 'nowrap',
   },
   brandName: {
     fontFamily: 'var(--font-display)',
+    fontSize: '1.19rem',
     fontWeight: 600,
     letterSpacing: '-0.02em',
     color: 'var(--text-primary)',
   },
   brandSub: {
-    fontSize: '0.6rem',
-    marginTop: '2px',
-  },
-  userCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '10px',
-    borderRadius: 'var(--radius-sm)',
-    backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--rule)',
-    marginBottom: '22px',
+    fontSize: '0.56rem',
+    letterSpacing: '0.18em',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+    marginTop: '3px',
   },
   avatarImg: {
-    width: '38px',
-    height: '38px',
     borderRadius: 'var(--radius-xs)',
     objectFit: 'cover',
     border: '1px solid var(--rule)',
     flexShrink: 0,
   },
   avatarFallback: {
-    width: '38px',
-    height: '38px',
     borderRadius: 'var(--radius-xs)',
     display: 'flex',
     alignItems: 'center',
@@ -190,54 +215,33 @@ const styles = {
     background: 'var(--accent-color)',
     color: 'var(--bg-secondary)',
     fontFamily: 'var(--font-stamp)',
-    fontSize: '0.8rem',
+    fontSize: '0.75rem',
     fontWeight: 700,
     flexShrink: 0,
   },
   userInfo: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
     overflow: 'hidden',
-    alignItems: 'flex-start',
   },
   userEmail: {
-    fontSize: '0.8rem',
+    fontSize: '0.75rem',
     fontWeight: 600,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    maxWidth: '160px',
     color: 'var(--text-primary)',
   },
-  roleStamp: {
-    fontSize: '0.55rem',
-    padding: '1px 6px',
+  userRole: {
+    fontSize: '0.56rem',
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
   },
   navMenu: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '3px',
-    flex: 1,
-  },
-  navHeading: {
-    fontSize: '0.6rem',
-    marginBottom: '8px',
-    paddingLeft: '13px',
-  },
-  sidebarFooter: {
-    display: 'flex',
-    flexDirection: 'column',
     gap: '2px',
-    paddingTop: '14px',
-    borderTop: '1px solid var(--rule)',
-  },
-  footerBtn: {
-    justifyContent: 'flex-start',
-    width: '100%',
-    minHeight: '38px',
-    padding: '8px 13px',
-    fontSize: '0.85rem',
+    flex: 1,
   },
   mobileActions: {
     display: 'flex',
@@ -245,7 +249,8 @@ const styles = {
     gap: '2px',
   },
   iconBtn: {
-    minHeight: '36px',
+    minHeight: '44px',
+    minWidth: '44px',
     padding: '8px',
   },
 };

@@ -1,9 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  FolderPlus, Compass, Users, X, BookOpen, Sparkles, RefreshCw,
-  AlertTriangle, Book, MapPin,
+  FolderPlus, Compass, Users, BookOpen, Sparkles, RefreshCw,
+  AlertTriangle, MapPin,
 } from 'lucide-react';
+import BookVolume, { CLOTHS } from '../components/BookVolume';
+import Modal from '../components/Modal';
+
+/**
+ * The miniature shelf of spines on a bookshelf card.
+ *
+ * Nine spines, with widths and heights derived from the shelf id so a given
+ * shelf always looks like itself. Sized against the shelf's own volume count so
+ * a drawer of eleven books does not present the same full block as one of four
+ * hundred — the card should read as "how much is in here" at a glance.
+ */
+function SpineStrip({ shelfId, count }) {
+  const spines = useMemo(() => {
+    // An empty drawer draws no spines at all — a single stub beside a count of
+    // zero reads as a rendering fault. Anything non-empty gets at least one.
+    const filled = count === 0 ? 0 : Math.max(1, Math.min(9, Math.round((count / 40) * 9)));
+    return Array.from({ length: filled }, (_, i) => ({
+      w: 4 + ((shelfId * 5 + i * 3) % 5),
+      h: 62 + ((shelfId * 11 + i * 17) % 38),
+      c: CLOTHS[(shelfId * 3 + i) % CLOTHS.length],
+    }));
+  }, [shelfId, count]);
+
+  return (
+    <div className="spine-row" aria-hidden="true">
+      {spines.map((s, i) => (
+        <span key={i} className="spine" style={{ width: `${s.w}px`, height: `${s.h}%`, background: s.c }} />
+      ))}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -99,6 +130,24 @@ export default function Dashboard() {
   const personalShelves = shelves.filter((s) => s.role === 'owner');
   const sharedShelves = shelves.filter((s) => s.role !== 'owner');
 
+  /**
+   * The accession record. Only shelves you own count towards it — a read-only
+   * window onto someone else's cookbooks is not part of your accession.
+   */
+  const accession = useMemo(() => {
+    const volumes = personalShelves.reduce((n, s) => n + (s.book_count || 0), 0);
+    const read = personalShelves.reduce((n, s) => n + (s.read_count || 0), 0);
+    const filed = personalShelves.reduce((n, s) => n + (s.filed_this_month || 0), 0);
+    return {
+      volumes,
+      read,
+      unread: volumes - read,
+      filed,
+      shelves: personalShelves.length,
+      readPct: volumes > 0 ? Math.round((read / volumes) * 100) : 0,
+    };
+  }, [personalShelves]);
+
   /** Stamp treatment per access scope, mirroring the RBAC vocabulary. */
   const roleStamp = (shelf) => {
     if (shelf.is_wishlist) return <span className="stamp stamp-tilt stamp-warning">★ Wishlist</span>;
@@ -107,12 +156,24 @@ export default function Dashboard() {
     return <span className="stamp stamp-tilt stamp-muted">View Only</span>;
   };
 
+  /** The colour of the spine edge down the card's leading side. */
+  const shelfTint = (shelf) => {
+    if (shelf.is_wishlist) return 'var(--warning-color)';
+    if (shelf.role === 'collaborator') return 'var(--success-color)';
+    if (shelf.role === 'view') return 'var(--text-muted)';
+    return CLOTHS[shelf.id % CLOTHS.length];
+  };
+
   const shelfCard = (shelf, index) => (
     <Link
       key={shelf.id}
       to={`/bookshelves/${shelf.id}`}
       className="card card-spine card-link card-in"
-      style={{ ...styles.shelfCard, animationDelay: `${Math.min(index, 8) * 35}ms` }}
+      style={{
+        ...styles.shelfCard,
+        '--spine-color': shelfTint(shelf),
+        animationDelay: `${Math.min(index, 8) * 35}ms`,
+      }}
     >
       <div style={styles.shelfCardHeader}>
         <h3 style={styles.shelfName}>{shelf.name}</h3>
@@ -124,6 +185,12 @@ export default function Dashboard() {
       <p style={styles.shelfDesc}>
         {shelf.description || 'No descriptive notes added yet.'}
       </p>
+
+      {/* How much is in this drawer, read at a glance */}
+      <div style={styles.shelfMeasure}>
+        <SpineStrip shelfId={shelf.id} count={shelf.book_count || 0} />
+        <span style={styles.shelfCount}>{shelf.book_count ?? 0}</span>
+      </div>
 
       <div style={styles.cardFooter}>
         <span className="typed" style={styles.footerText}>
@@ -178,6 +245,77 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Accession record — the figures for the collection as a whole */}
+      <div className="card" style={styles.accession}>
+        <div style={styles.accessionHead}>
+          <span className="eyebrow">Accession Record</span>
+          <div style={styles.dottedFill} />
+          <span className="typed" style={styles.accessionStamp}>
+            {accession.volumes === 0
+              ? 'NOT YET OPENED'
+              : accession.filed > 0
+                ? 'UPDATED THIS MONTH'
+                : 'NO NEW ACCESSIONS'}
+          </span>
+        </div>
+
+        {/* A grid of zeroes reads as a broken widget rather than an empty one,
+            so a collection with nothing in it says so and points somewhere. */}
+        {accession.volumes === 0 ? (
+          <p style={styles.accessionEmpty}>
+            {accession.shelves === 0
+              ? 'No shelves yet. Build one, then scan or search a book onto it — the figures fill in from there.'
+              : 'Nothing filed yet. Open a shelf and scan a barcode to start the record.'}
+          </p>
+        ) : (
+        <>
+        <div className="stat-grid">
+          <div>
+            <div className="stat-value">{accession.volumes}</div>
+            <div className="stat-label">Volumes</div>
+          </div>
+          <div>
+            <div className="stat-value">{accession.shelves}</div>
+            <div className="stat-label">Shelves</div>
+          </div>
+          <div>
+            <div className="stat-value" style={{ color: 'var(--success-color)' }}>
+              {accession.readPct}%
+            </div>
+            <div className="stat-label">Read</div>
+          </div>
+          <div>
+            <div className="stat-value" style={{ color: 'var(--accent-color)' }}>
+              {accession.filed}
+            </div>
+            <div className="stat-label">Filed this month</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '18px' }}>
+          <div className="meter">
+            <span
+              style={{ width: `${accession.readPct}%`, background: 'var(--success-color)' }}
+            />
+          </div>
+          <div className="meter-key">
+            <span>
+              <span className="meter-swatch" style={{ background: 'var(--success-color)' }} />
+              {accession.read} READ
+            </span>
+            <span>
+              <span
+                className="meter-swatch"
+                style={{ background: 'var(--sunk)', border: '1px solid var(--rule)' }}
+              />
+              {accession.unread} UNREAD
+            </span>
+          </div>
+        </div>
+        </>
+        )}
+      </div>
+
       {/* Personal Bookshelves */}
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
@@ -228,27 +366,13 @@ export default function Dashboard() {
 
       {/* Create Bookshelf Modal */}
       {isModalOpen && (
-        <div style={styles.modalOverlay} onClick={() => !createLoading && setIsModalOpen(false)}>
-          <div
-            className="card card-spine card-in"
-            style={styles.modalCard}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={styles.modalHeader}>
-              <div>
-                <span className="eyebrow">New Entry</span>
-                <h3 style={styles.modalTitle}>Construct Bookshelf</h3>
-              </div>
-              <button
-                className="btn btn-ghost"
-                style={styles.closeModalBtn}
-                onClick={() => setIsModalOpen(false)}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
+        <Modal
+          onClose={() => setIsModalOpen(false)}
+          eyebrow="New Entry"
+          title="Construct Bookshelf"
+          className="card-spine"
+          busy={createLoading}
+        >
             <hr className="rule-double" style={{ margin: '0 0 18px' }} />
 
             <form onSubmit={handleCreateShelf} style={styles.modalForm}>
@@ -292,34 +416,20 @@ export default function Dashboard() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Book Roulette Modal */}
       {isRouletteModalOpen && (
-        <div style={styles.modalOverlay} onClick={() => !rouletteLoading && handleCloseRoulette()}>
-          <div
-            className="card card-spine card-in"
-            style={{ ...styles.modalCard, maxWidth: '440px', textAlign: 'center' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={styles.modalHeader}>
-              <div style={{ textAlign: 'left' }}>
-                <span className="eyebrow">Shelf Lottery</span>
-                <h3 style={styles.modalTitle}>Book Roulette</h3>
-              </div>
-              <button
-                className="btn btn-ghost"
-                style={styles.closeModalBtn}
-                onClick={handleCloseRoulette}
-                disabled={rouletteLoading}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
+        <Modal
+          onClose={handleCloseRoulette}
+          eyebrow="Shelf Lottery"
+          title="Book Roulette"
+          width="440px"
+          className="card-spine"
+          busy={rouletteLoading}
+          bodyStyle={{ textAlign: 'center' }}
+        >
             <hr className="rule-double" style={{ margin: '0 0 18px' }} />
 
             {rouletteLoading && (
@@ -341,25 +451,13 @@ export default function Dashboard() {
 
             {!rouletteLoading && rouletteBook && (
               <div style={styles.rouletteResult}>
-                {rouletteBook.cover_image_url ? (
-                  <img
-                    src={rouletteBook.cover_image_url}
-                    alt=""
-                    style={styles.rouletteCover}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextSibling.style.display = 'flex';
-                    }}
-                  />
-                ) : null}
-                <div
-                  style={{
-                    ...styles.rouletteCoverFallback,
-                    display: rouletteBook.cover_image_url ? 'none' : 'flex',
-                  }}
-                >
-                  <Book size={30} />
-                </div>
+                <BookVolume
+                  title={rouletteBook.title}
+                  author={rouletteBook.author}
+                  coverUrl={rouletteBook.cover_image_url}
+                  seed={rouletteBook.isbn || rouletteBook.id || rouletteBook.title}
+                  style={{ width: '108px', marginBottom: '8px' }}
+                />
 
                 <h4 style={styles.rouletteBookTitle}>{rouletteBook.title}</h4>
                 <p style={styles.rouletteBookAuthor}>
@@ -389,8 +487,7 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -458,7 +555,7 @@ const styles = {
   },
   shelfGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(272px, 1fr))',
     gap: '16px',
   },
   shelfCard: {
@@ -488,6 +585,45 @@ const styles = {
     lineHeight: 1.55,
     flex: 1,
   },
+  shelfMeasure: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '10px',
+    marginTop: '13px',
+  },
+  shelfCount: {
+    marginLeft: 'auto',
+    fontFamily: 'var(--font-stamp)',
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    lineHeight: 1,
+    color: 'var(--text-primary)',
+  },
+  accession: {
+    padding: '20px 22px',
+  },
+  accessionHead: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '9px',
+    marginBottom: '14px',
+  },
+  dottedFill: {
+    flex: 1,
+    borderTop: '1px dotted var(--rule)',
+  },
+  accessionStamp: {
+    fontSize: '0.63rem',
+    letterSpacing: '0.1em',
+    color: 'var(--text-muted)',
+    whiteSpace: 'nowrap',
+  },
+  accessionEmpty: {
+    fontSize: '0.88rem',
+    lineHeight: 1.6,
+    color: 'var(--text-secondary)',
+    maxWidth: '460px',
+  },
   cardFooter: {
     borderTop: '1px solid var(--rule)',
     paddingTop: '10px',
@@ -515,43 +651,6 @@ const styles = {
     borderRadius: 'var(--radius-md)',
     background: 'color-mix(in srgb, var(--bg-secondary) 45%, transparent)',
   },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(28, 20, 12, 0.55)',
-    zIndex: 200,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: '480px',
-    padding: '22px 26px 26px',
-    display: 'flex',
-    flexDirection: 'column',
-    boxShadow: 'var(--shadow-lg)',
-    maxHeight: '90vh',
-    overflowY: 'auto',
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: '12px',
-    marginBottom: '10px',
-  },
-  modalTitle: {
-    fontSize: 'var(--step-2)',
-    fontWeight: 600,
-    marginTop: '2px',
-  },
-  closeModalBtn: {
-    minHeight: '32px',
-    padding: '6px',
-    marginTop: '2px',
-  },
   modalForm: {
     display: 'flex',
     flexDirection: 'column',
@@ -575,27 +674,6 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     width: '100%',
-  },
-  rouletteCover: {
-    height: '168px',
-    borderRadius: 'var(--radius-xs)',
-    boxShadow: 'var(--shadow-md)',
-    objectFit: 'cover',
-    border: '1px solid var(--rule)',
-    marginBottom: '6px',
-  },
-  rouletteCoverFallback: {
-    height: '168px',
-    width: '112px',
-    borderRadius: 'var(--radius-xs)',
-    backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--rule)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: 'var(--shadow-md)',
-    marginBottom: '6px',
-    color: 'var(--text-muted)',
   },
   rouletteBookTitle: {
     fontSize: '1.2rem',

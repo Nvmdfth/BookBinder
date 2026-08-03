@@ -15,14 +15,16 @@
    ========================================================================== */
 
 :root {
-  /* Typography — resolved from system faces so a self-hosted instance needs no
-     network access. The serif stack lands on genuine book faces on every OS. */
-  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua',
-                  Georgia, 'Times New Roman', serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-               Arial, sans-serif;
-  --font-stamp: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas,
-                'Courier New', monospace;
+  /* Typography — three faces doing three jobs, bundled locally from @fontsource
+     (see src/main.jsx) so a self-hosted instance still needs no network access.
+     The old system stacks are retained as fallbacks: Spectral lands on a genuine
+     book face on every OS if the woff2 has not painted yet. */
+  --font-display: 'Spectral', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+                  'Book Antiqua', Georgia, 'Times New Roman', serif;
+  --font-body: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, sans-serif;
+  --font-stamp: 'Courier Prime', ui-monospace, 'SFMono-Regular', 'Cascadia Mono',
+                Menlo, Consolas, 'Courier New', monospace;
 
   /* Retained: a few call sites still reference the old heading token */
   --font-heading: var(--font-display);
@@ -53,8 +55,22 @@
 
   --spine-width: 5px;
 
+  /* Cover grid track. The catalog grid is intrinsically responsive — three
+     columns at 390px, eight on a desktop — off this one number. */
+  --cover: 114px;
+
   --transition-smooth: all 0.22s cubic-bezier(0.32, 0.72, 0.3, 1);
   --transition-bounce: all 0.34s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* Surface derivations. Declared once here rather than ten times across the
+   palettes: both these and the palette tokens land on <html>, so the palette
+   rule wins for --bg-primary and these resolve against the winning value.
+     --sunk  recessed stock: input wells, meter troughs
+     --soft  a quiet hover fill that is not the accent tint */
+:root {
+  --sunk: color-mix(in srgb, var(--bg-primary) 90%, var(--text-primary));
+  --soft: color-mix(in srgb, var(--bg-primary) 84%, var(--text-primary));
 }
 
 /* --------------------------------------------------------------------------
@@ -323,7 +339,8 @@ button, input, textarea, select {
   bottom: 0;
   left: 0;
   width: var(--spine-width);
-  background: var(--accent-color);
+  /* Defaults to the accent, but a card may bind itself in its own cloth */
+  background: var(--spine-color, var(--accent-color));
   /* Hint of the recessed groove where cloth wraps the board */
   box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.22);
   z-index: 1;
@@ -529,9 +546,11 @@ button, input, textarea, select {
 
 .form-input {
   width: 100%;
+  min-height: 46px;
   padding: 11px 14px;
   border-radius: var(--radius-sm);
-  background-color: var(--bg-primary);
+  /* Recessed stock — a field is a well punched into the card, not a raised box */
+  background-color: var(--sunk);
   border: 1px solid var(--rule);
   color: var(--text-primary);
   transition: var(--transition-smooth);
@@ -579,32 +598,42 @@ select.form-input {
   display: flex;
   min-height: 100vh;
   width: 100%;
+
+  /* Open width. The rail collapses to icons only — at 500 volumes horizontal
+     room is cover space, so the shelf gets it back on demand. */
+  --nav-w: 244px;
 }
 
+.app-shell-rail { --nav-w: 72px; }
+
 .app-sidebar {
-  width: 268px;
-  padding: 22px 18px;
+  width: var(--nav-w);
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
+  gap: 2px;
   position: fixed;
   top: 18px;
   left: 18px;
   bottom: 18px;
   z-index: 100;
+  overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--rule);
   box-shadow: var(--shadow-md);
+  transition: width 0.22s cubic-bezier(0.32, 0.72, 0.3, 1);
 }
 
 .app-main {
   flex: 1;
   padding: 36px 40px 56px;
-  margin-left: 304px;
+  margin-left: calc(var(--nav-w) + 36px);
   min-height: 100vh;
   width: 100%;
   display: flex;
   justify-content: center;
+  transition: margin-left 0.22s cubic-bezier(0.32, 0.72, 0.3, 1);
 }
 
 .app-content {
@@ -641,6 +670,9 @@ select.form-input {
     box-shadow: var(--shadow-sm);
   }
 
+  /* Clear the fixed mobile header, or the filter bar slides underneath it */
+  .filter-bar { top: 58px; }
+
   /* Sticky thumb-reachable tray (Req 4.1.1) */
   .app-bottom-tray {
     display: flex;
@@ -664,15 +696,27 @@ select.form-input {
 .nav-link {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 10px 13px;
-  border-radius: var(--radius-sm);
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 7px;
   color: var(--text-secondary);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   transition: var(--transition-smooth);
   position: relative;
+  white-space: nowrap;
+  overflow: hidden;
 }
+
+/* Collapsed rail: icons only, still 44px of target */
+.app-shell-rail .nav-link,
+.app-shell-rail .nav-footer-btn {
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
+.app-shell-rail .nav-label { display: none; }
 
 .nav-link:hover {
   background: var(--accent-light);
@@ -717,6 +761,54 @@ select.form-input {
 .tray-link-active {
   color: var(--accent-color);
   border-top-color: var(--accent-color);
+}
+
+/* Sidebar furniture */
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 0;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.nav-footer {
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: var(--transition-smooth);
+}
+
+.nav-footer-btn:hover { background: var(--soft); color: var(--text-primary); }
+
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 2px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* --------------------------------------------------------------------------
@@ -809,6 +901,505 @@ select.form-input {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Bound volumes
+
+   Most books in a home library have no cover art, and a grid of grey book
+   icons reads as broken rather than as a shelf. Every volume is therefore
+   *rendered* as a bound book — cloth colour, board groove, a rule under the
+   head, and a typeset title — and a real cover image drops into the identical
+   2:3 frame when one exists. A mixed shelf still reads as one object.
+   -------------------------------------------------------------------------- */
+
+.volume {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  overflow: hidden;
+  /* Square at the spine, rounded at the fore-edge */
+  border-radius: 2px 5px 5px 2px;
+  box-shadow: var(--shadow-md);
+  transition: var(--transition-smooth);
+}
+
+/* Cloth weave, laid over whatever the binding colour is */
+.volume::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(48deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px);
+}
+
+.volume-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The groove where the cloth wraps around the board */
+.volume-board {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  box-shadow: inset -2px 0 3px rgba(0, 0, 0, 0.3);
+}
+
+.volume-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 11px 10px 9px 15px;
+}
+
+/* Rule struck under the head of the binding, above the title */
+.volume-rule {
+  position: absolute;
+  left: 15px;
+  right: 10px;
+  top: 34px;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.volume-title {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 252, 245, 0.96);
+  margin-top: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.volume-author {
+  font-family: var(--font-stamp);
+  font-size: 0.53rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 252, 245, 0.62);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.volume-read {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: rgba(255, 252, 245, 0.85);
+  z-index: 2;
+}
+
+/* Large variant — the book detail plate. Everything scales off the frame. */
+.volume-lg { border-radius: 3px 7px 7px 3px; box-shadow: var(--shadow-lg); }
+.volume-lg .volume-board { width: 15px; box-shadow: inset -3px 0 5px rgba(0, 0, 0, 0.32); }
+.volume-lg .volume-text { padding: 22px 18px 16px 28px; }
+.volume-lg .volume-rule { left: 28px; right: 18px; top: 62px; }
+.volume-lg .volume-title { font-size: 1.25rem; margin-top: 66px; -webkit-line-clamp: 6; }
+.volume-lg .volume-author { font-size: 0.62rem; letter-spacing: 0.11em; }
+
+/* Small variant — session tray rows and search results */
+.volume-sm .volume-board { width: 6px; box-shadow: inset -1px 0 2px rgba(0, 0, 0, 0.3); }
+.volume-sm .volume-text { padding: 7px 6px 6px 10px; }
+.volume-sm .volume-rule { display: none; }
+.volume-sm .volume-title { font-size: 0.6rem; margin-top: 0; -webkit-line-clamp: 3; }
+
+/* --------------------------------------------------------------------------
+   Catalog grid — one number (--cover) drives the whole shelf
+   -------------------------------------------------------------------------- */
+
+.cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cover), 1fr));
+  gap: 16px 14px;
+}
+
+/* A wrapper, so the read toggle can sit over the cover without nesting a
+   button inside a button */
+.cover-cell {
+  position: relative;
+  display: flex;
+}
+
+.cover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.cover-cell:hover .cover-open { transform: translateY(-3px); }
+.cover-cell:hover .volume { box-shadow: var(--shadow-lg); }
+
+/* Read toggle, struck onto the head of the binding */
+.cover-read {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  /* Unread is quiet until you go looking for it; the cover stays the subject */
+  background: rgba(10, 7, 4, 0.45);
+  color: rgba(255, 252, 245, 0.72);
+  opacity: 0;
+  transition: var(--transition-smooth);
+}
+
+/* Always legible once set, and always reachable by keyboard or touch */
+.cover-read-on,
+.cover-cell:hover .cover-read,
+.cover-read:focus-visible {
+  opacity: 1;
+}
+
+.cover-read-on {
+  background: var(--success-color);
+  color: #fff;
+}
+
+.cover-read:hover { transform: scale(1.08); }
+
+/* Hover is not available on a touch screen, so the control cannot hide there */
+@media (hover: none) {
+  .cover-read { opacity: 1; }
+}
+
+.cover-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 1px;
+  min-width: 0;
+}
+
+.cover-caption-title {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cover-caption-sub,
+.cover-caption-loc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.cover-caption-sub { font-size: 0.72rem; }
+
+.cover-caption-loc {
+  font-family: var(--font-stamp);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Filter bar — the strip above a shelf. Sticks to the top of the scroll area
+   so the criteria stay reachable at 500 volumes.
+   -------------------------------------------------------------------------- */
+
+.filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--bg-primary);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* A bordered well that holds an icon plus a borderless control */
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: var(--transition-smooth);
+}
+
+.field:focus-within { border-color: var(--accent-color); }
+
+.field-grow { flex: 1 1 220px; min-width: 180px; }
+
+.field input,
+.field select {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.field input { font-weight: 400; }
+.field input::placeholder { color: var(--text-muted); }
+
+/* Segmented control — All / Read / Unread */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+}
+
+.seg-btn {
+  border: 0;
+  border-radius: var(--radius-xs);
+  min-height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.79rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.seg-btn:hover { color: var(--text-primary); }
+
+.seg-btn-active,
+.seg-btn-active:hover {
+  background: var(--accent-light);
+  color: var(--accent-color);
+}
+
+/* Subject chips — typed, because they are catalog subject headings */
+.chip-row {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chip {
+  flex: none;
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  min-height: 32px;
+  padding: 0 13px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-stamp);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.chip:hover { border-color: var(--accent-color); color: var(--accent-color); }
+
+.chip-active,
+.chip-active:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--bg-secondary);
+}
+
+/* Count line: "Showing 12 of 204 volumes", trailing off into a dotted rule */
+.count-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.count-line span {
+  font-family: var(--font-stamp);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.count-line::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dotted var(--rule);
+}
+
+/* --------------------------------------------------------------------------
+   Accession record — the dashboard figures panel
+   -------------------------------------------------------------------------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 18px;
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* Read / in-progress / unread proportion bar */
+.meter {
+  height: 9px;
+  border-radius: 2px;
+  background: var(--sunk);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+  display: flex;
+}
+
+.meter-key {
+  display: flex;
+  gap: 18px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+
+.meter-key span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-stamp);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.meter-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* Miniature shelf of spines on a bookshelf card */
+.spine-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 38px;
+}
+
+.spine {
+  border-radius: 1px 1px 0 0;
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.25);
+}
+
+/* --------------------------------------------------------------------------
+   Toggle switch — the admin registration lock
+   -------------------------------------------------------------------------- */
+
+.switch {
+  flex: none;
+  width: 74px;
+  height: 40px;
+  border-radius: 22px;
+  border: 1px solid var(--rule);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+  background: var(--text-muted);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: var(--transition-smooth);
+}
+
+.switch-on {
+  background: var(--success-color);
+  justify-content: flex-end;
+}
+
+.switch-knob {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.switch-on .switch-knob { color: var(--success-color); }
+
+/* --------------------------------------------------------------------------
+   Scanner
+   -------------------------------------------------------------------------- */
+
+/* The sweep line inside the reticle. Amplitude is half the reticle height so
+   it never runs past the brackets. */
+@keyframes bbSweep {
+  0%   { transform: translateY(-42px); }
+  50%  { transform: translateY(42px); }
+  100% { transform: translateY(-42px); }
+}
+
+.scan-sweep { animation: bbSweep 2.4s ease-in-out infinite; }
+
+/* Confirmed volumes drop into the session tray */
+@keyframes bbRise {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.tray-row-in { animation: bbRise 0.26s cubic-bezier(0.32, 0.72, 0.3, 1) both; }
 
 /* --------------------------------------------------------------------------
    Utilities

@@ -108,11 +108,30 @@ describe('Card Catalog system invariants', () => {
     }
   });
 
-  it('resolves typography from system faces so a self-hosted instance needs no network', () => {
+  it('bundles its typography locally so a self-hosted instance needs no network', () => {
+    // The design's three faces are pulled from @fontsource and bundled by Vite
+    // as local woff2. Nothing may reach out to a font CDN at runtime — that
+    // would make an offline instance render in a fallback face, or hang.
+    const entry = fs.readFileSync(path.join(srcDir, 'main.jsx'), 'utf8');
+    const html = fs.readFileSync(path.join(srcDir, '..', 'index.html'), 'utf8');
+
+    for (const text of [css, entry, html]) {
+      expect(text).not.toMatch(/fonts\.googleapis\.com/);
+      expect(text).not.toMatch(/fonts\.gstatic\.com/);
+    }
     expect(css).not.toMatch(/@import\s+url\(/);
-    expect(css).not.toMatch(/fonts\.googleapis\.com/);
-    expect(definedTokens.has('--font-display')).toBe(true);
-    expect(css).toMatch(/--font-display:[^;]*serif/);
+
+    for (const family of ['spectral', 'archivo', 'courier-prime']) {
+      expect(entry).toMatch(new RegExp(`@fontsource/${family}/`));
+    }
+  });
+
+  it('keeps a system-face fallback behind every bundled family', () => {
+    // A woff2 that has not painted yet must land on a real book face, not on
+    // the browser's default — that reads as unfinished rather than archival.
+    expect(css).toMatch(/--font-display:\s*'Spectral'[^;]*serif/);
+    expect(css).toMatch(/--font-body:\s*'Archivo'[^;]*sans-serif/);
+    expect(css).toMatch(/--font-stamp:\s*'Courier Prime'[^;]*monospace/);
   });
 
   it('drops the glassmorphism blur the redesign replaced', () => {

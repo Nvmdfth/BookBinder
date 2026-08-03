@@ -92,14 +92,14 @@ const styles = {
     width: '26px',
     height: '13px',
     borderRadius: '13px',
-    background: 'var(--bg-primary)',
+    background: 'var(--sunk)',
     boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.22)',
     border: '1px solid var(--rule)',
   },
   accession: {
     textAlign: 'center',
     color: 'var(--text-muted)',
-    fontSize: '0.68rem',
-    letterSpacing: '0.06em',
+    fontSize: '0.66rem',
+    letterSpacing: '0.14em',
   },
 };

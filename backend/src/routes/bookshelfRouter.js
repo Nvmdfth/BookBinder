@@ -15,21 +15,34 @@ router.get('/', async (req, res) => {
   const userId = req.user.id;
 
   try {
-    // Elegant SQL query utilizing UNION ALL to pull owned and shared libraries in a single run
+    // Elegant SQL query utilizing UNION ALL to pull owned and shared libraries in a single run.
+    //
+    // The accession figures on the dashboard (total volumes, percentage read,
+    // filed this month) and the spine strip on every shelf card are all derived
+    // from these three counts. Correlated sub-selects keep them on the one round
+    // trip rather than fanning out a request per shelf.
     const shelvesRes = await query(
-      `SELECT b.id, b.name, b.description, b.created_at, 'owner' AS role, u.email AS owner_email, b.is_wishlist
+      `SELECT b.id, b.name, b.description, b.created_at, 'owner' AS role, u.email AS owner_email, b.is_wishlist,
+              (SELECT COUNT(*) FROM user_books ub WHERE ub.bookshelf_id = b.id)::int AS book_count,
+              (SELECT COUNT(*) FROM user_books ub WHERE ub.bookshelf_id = b.id AND ub.is_read)::int AS read_count,
+              (SELECT COUNT(*) FROM user_books ub WHERE ub.bookshelf_id = b.id
+                 AND ub.created_at >= date_trunc('month', CURRENT_TIMESTAMP))::int AS filed_this_month
        FROM bookshelves b
        JOIN users u ON b.user_id = u.id
        WHERE b.user_id = $1
-       
+
        UNION ALL
-       
-       SELECT b.id, b.name, b.description, b.created_at, s.permission AS role, u.email AS owner_email, b.is_wishlist
+
+       SELECT b.id, b.name, b.description, b.created_at, s.permission AS role, u.email AS owner_email, b.is_wishlist,
+              (SELECT COUNT(*) FROM user_books ub WHERE ub.bookshelf_id = b.id)::int AS book_count,
+              (SELECT COUNT(*) FROM user_books ub WHERE ub.bookshelf_id = b.id AND ub.is_read)::int AS read_count,
+              (SELECT COUNT(*) FROM user_books ub WHERE ub.bookshelf_id = b.id
+                 AND ub.created_at >= date_trunc('month', CURRENT_TIMESTAMP))::int AS filed_this_month
        FROM bookshelves b
        JOIN shelf_shares s ON b.id = s.bookshelf_id
        JOIN users u ON b.user_id = u.id
        WHERE s.shared_with_user_id = $1
-       
+
        ORDER BY name ASC`,
       [userId]
     );

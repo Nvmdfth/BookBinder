@@ -2,8 +2,25 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, Volume2, VolumeX, AlertCircle, RefreshCw } from 'lucide-react';
 import { cleanISBN, isValidISBN } from '../utils/isbn';
+import BookVolume from './BookVolume';
 
-export default function BarcodeScanner({ onScanSuccess, onScanError }) {
+/**
+ * The decode region, as a fraction of the viewport.
+ *
+ * These two numbers are the single source of truth: the qrbox config below is
+ * computed from them, and so is the on-screen reticle. The previous overlay was
+ * positioned independently (top:25%, height:35%) and so sat about 7% above the
+ * region html5-qrcode was actually decoding — the guide box and the scanner
+ * disagreed about where the barcode should go.
+ */
+const BOX_W = 0.7;
+const BOX_H = 0.35;
+
+/** The mask cut-outs, derived so they can never drift from the region. */
+const MASK_X = `${((1 - BOX_W) / 2) * 100}%`;
+const MASK_Y = `${((1 - BOX_H) / 2) * 100}%`;
+
+export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }) {
   const [isActive, setIsActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -97,7 +114,14 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
 
   const handleConfirmYes = () => {
     if (lookupDetails) {
-      onScanSuccess(lookupDetails.isbn);
+      /*
+       * Standing at a shelf, confirm-and-return is the wrong loop: you work
+       * along a row of thirty spines, not one book at a time. When the caller
+       * supplies onConfirm the volume drops into its session tray and the
+       * camera stays live; the whole run is filed in one go at the end.
+       */
+      if (onConfirm) onConfirm(lookupDetails);
+      else onScanSuccess(lookupDetails.isbn);
     }
     handleConfirmDismiss();
   };
@@ -147,9 +171,10 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
         const config = {
           fps: 15,
           qrbox: (width, height) => {
-            // Responsive target frame
-            const size = Math.min(width, height) * 0.7;
-            return { width: size, height: size * 0.5 }; // Horizontal barcode size ratio
+            // Responsive target frame, centred by html5-qrcode. The reticle
+            // overlay is laid out from the same two constants.
+            const side = Math.min(width, height);
+            return { width: side * BOX_W, height: side * BOX_H };
           },
           aspectRatio: 1.0,
         };
@@ -299,10 +324,25 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
         <div style={styles.cameraViewport} className="card">
           <div id={scannerContainerId} style={styles.cameraPreview}></div>
           
-          {/* Custom high-contrast scanning guide lines overlay */}
-          <div style={styles.overlayFrame} className={isPulse ? 'scan-pulse' : ''}>
-            <div style={styles.scanningLine}></div>
-            <div style={styles.guideText}>Align Barcode Here</div>
+          {/* Mask, cut to the decode region on all four sides. Four panels
+              rather than one giant spread box-shadow, so the region and the
+              mask are guaranteed to be the same rectangle. */}
+          <div style={{ ...styles.mask, left: 0, right: 0, top: 0, height: MASK_Y }} />
+          <div style={{ ...styles.mask, left: 0, right: 0, bottom: 0, height: MASK_Y }} />
+          <div style={{ ...styles.mask, left: 0, top: MASK_Y, bottom: MASK_Y, width: MASK_X }} />
+          <div style={{ ...styles.mask, right: 0, top: MASK_Y, bottom: MASK_Y, width: MASK_X }} />
+
+          {/* The reticle: corner brackets on the decode region itself, with the
+              caption below the mask rather than printed over the barcode. */}
+          <div style={styles.reticle} className={isPulse ? 'scan-pulse' : ''}>
+            <span style={{ ...styles.corner, left: 0, top: 0, borderLeftWidth: 3, borderTopWidth: 3, borderRadius: '5px 0 0 0' }} />
+            <span style={{ ...styles.corner, right: 0, top: 0, borderRightWidth: 3, borderTopWidth: 3, borderRadius: '0 5px 0 0' }} />
+            <span style={{ ...styles.corner, left: 0, bottom: 0, borderLeftWidth: 3, borderBottomWidth: 3, borderRadius: '0 0 0 5px' }} />
+            <span style={{ ...styles.corner, right: 0, bottom: 0, borderRightWidth: 3, borderBottomWidth: 3, borderRadius: '0 0 5px 0' }} />
+            <span style={styles.scanningLine} className="scan-sweep" />
+            <span style={styles.guideText}>
+              {isPulse ? 'Matched' : 'Align the barcode'}
+            </span>
           </div>
 
           {/* v1.4 Loading Overlay */}
@@ -320,17 +360,14 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
                 Is this the correct book?
               </h4>
               
-              {lookupDetails.cover_image_url ? (
-                <img 
-                  src={lookupDetails.cover_image_url} 
-                  alt="" 
-                  style={styles.confirmCover} 
-                  onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                />
-              ) : null}
-              <div style={{ ...styles.confirmCoverFallback, display: lookupDetails.cover_image_url ? 'none' : 'flex' }}>
-                <Camera size={24} style={{ color: 'var(--text-muted)' }} />
-              </div>
+              <BookVolume
+                title={lookupDetails.title}
+                author={lookupDetails.author}
+                coverUrl={lookupDetails.cover_image_url}
+                seed={lookupDetails.isbn}
+                size="sm"
+                style={{ width: '82px' }}
+              />
 
               <div style={{ marginTop: '6px' }}>
                 <div style={styles.confirmTitle} title={lookupDetails.title}>{lookupDetails.title}</div>
@@ -342,7 +379,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanError }) {
                   No, Skip
                 </button>
                 <button className="btn btn-success" style={{ height: '36px', padding: '0 16px', fontSize: '0.8rem', backgroundColor: 'var(--success-color)', border: 'none', color: '#ffffff' }} onClick={handleConfirmYes}>
-                  Yes, Add
+                  {onConfirm ? 'File it' : 'Yes, Add'}
                 </button>
               </div>
             </div>
@@ -449,39 +486,54 @@ const styles = {
     width: '100%',
     height: '100%',
   },
-  overlayFrame: {
+  mask: {
     position: 'absolute',
-    top: '25%',
-    left: '15%',
-    right: '15%',
-    height: '35%',
-    border: '2.5px solid rgba(255, 255, 255, 0.8)',
-    borderRadius: 'var(--radius-sm)',
-    boxShadow: '0 0 0 2000px rgba(0, 0, 0, 0.65)', // High-contrast translucent mask surrounding the frame
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(10, 7, 4, 0.7)',
     pointerEvents: 'none',
-    transition: 'var(--transition-smooth)',
+    zIndex: 2,
+  },
+  reticle: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: `${BOX_W * 100}%`,
+    height: `${BOX_H * 100}%`,
+    pointerEvents: 'none',
+    zIndex: 3,
+  },
+  corner: {
+    position: 'absolute',
+    width: '26px',
+    height: '26px',
+    borderStyle: 'solid',
+    borderColor: 'rgba(255, 252, 245, 0.92)',
+    borderWidth: 0,
   },
   scanningLine: {
     position: 'absolute',
-    left: '4%',
-    right: '4%',
+    left: '8%',
+    right: '8%',
+    top: '50%',
     height: '2px',
-    backgroundColor: 'var(--danger-color)',
-    boxShadow: '0 0 8px var(--danger-color)',
-    animation: 'shimmer 1.5s infinite linear', // Barcode sweeping motion
+    backgroundColor: 'rgba(255, 252, 245, 0.92)',
+    boxShadow: '0 0 10px rgba(255, 252, 245, 0.85)',
   },
   guideText: {
     position: 'absolute',
-    bottom: '-32px',
-    color: '#ffffff',
-    fontSize: '0.8rem',
-    fontWeight: '600',
-    letterSpacing: '0.05em',
+    left: 0,
+    right: 0,
+    // Clear of the mask edge, so the caption never sits on the barcode
+    bottom: '-34px',
+    textAlign: 'center',
+    fontFamily: 'var(--font-stamp)',
+    fontSize: '0.69rem',
+    fontWeight: 700,
+    letterSpacing: '0.18em',
     textTransform: 'uppercase',
-    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+    color: 'rgba(255, 252, 245, 0.9)',
+    textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)',
+    whiteSpace: 'nowrap',
   },
   confirmationOverlay: {
     position: 'absolute',
@@ -489,8 +541,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(22, 16, 11, 0.95)',
-    backdropFilter: 'blur(8px)',
+    backgroundColor: 'rgba(16, 11, 7, 0.95)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -500,23 +551,6 @@ const styles = {
     zIndex: 10,
     textAlign: 'center',
     gap: '12px',
-  },
-  confirmCover: {
-    height: '110px',
-    borderRadius: '4px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-    objectFit: 'cover',
-  },
-  confirmCoverFallback: {
-    height: '110px',
-    width: '75px',
-    borderRadius: '4px',
-    backgroundColor: 'var(--surface-raised)',
-    border: '1px solid var(--rule)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
   },
   confirmTitle: {
     fontSize: '0.95rem',
