@@ -10,6 +10,10 @@ import { X } from 'lucide-react';
  * the page behind it, and a screen reader was never told a dialog had opened.
  * Centralising it means those cannot drift apart again.
  */
+/** Everything a user can reach with Tab. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function Modal({
   onClose,
   title,
@@ -24,7 +28,21 @@ export default function Modal({
   bodyStyle,
 }) {
   const panelRef = useRef(null);
+  const bodyRef = useRef(null);
   const headingId = useRef(`modal-h-${Math.random().toString(36).slice(2, 9)}`).current;
+
+  /*
+   * The setup effect below runs exactly once, so it cannot close over onClose
+   * or busy directly — callers pass inline arrows, which change identity on
+   * every parent render. Depending on them re-ran mount/unmount on each
+   * keystroke: the cleanup threw focus back to the opener and the setup then
+   * pulled it to the close button, so typing a name containing a space
+   * activated Close and dismissed the dialog.
+   */
+  const latest = useRef({ onClose, busy });
+  useEffect(() => {
+    latest.current = { onClose, busy };
+  });
 
   useEffect(() => {
     // Whatever had focus when the dialog opened gets it back on close
@@ -32,7 +50,7 @@ export default function Modal({
 
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (!busy) onClose();
+        if (!latest.current.busy) latest.current.onClose();
         return;
       }
 
@@ -40,9 +58,7 @@ export default function Modal({
 
       // Focus trap. Querying on each Tab rather than once on mount keeps it
       // correct for dialogs whose contents change while open.
-      const focusable = panelRef.current?.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
+      const focusable = panelRef.current?.querySelectorAll(FOCUSABLE);
       if (!focusable || focusable.length === 0) return;
 
       const first = focusable[0];
@@ -59,10 +75,14 @@ export default function Modal({
 
     document.addEventListener('keydown', onKeyDown);
 
-    // Move focus into the dialog so the first Tab lands inside it
-    const target = panelRef.current?.querySelector(
-      'input:not([disabled]), textarea:not([disabled]), button:not([disabled])'
-    );
+    /*
+     * Move focus into the dialog's *content*. Searching the whole panel would
+     * land on the close button, since it precedes the body in document order
+     * and querySelector resolves a selector list by document order, not by the
+     * order the selectors are written in. Nobody opens a form to focus Close.
+     */
+    const target =
+      bodyRef.current?.querySelector(FOCUSABLE) || panelRef.current?.querySelector(FOCUSABLE);
     target?.focus();
 
     // The page behind must not scroll under an open dialog
@@ -74,7 +94,7 @@ export default function Modal({
       document.body.style.overflow = previousOverflow;
       if (opener instanceof HTMLElement) opener.focus();
     };
-  }, [onClose, busy]);
+  }, []);
 
   return (
     <div
@@ -122,7 +142,7 @@ export default function Modal({
           </button>
         )}
 
-        <div style={bodyStyle}>{children}</div>
+        <div ref={bodyRef} style={bodyStyle}>{children}</div>
       </div>
     </div>
   );

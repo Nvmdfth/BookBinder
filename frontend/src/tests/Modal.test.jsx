@@ -73,6 +73,58 @@ describe('Modal', () => {
     expect(last).toHaveFocus();
   });
 
+  it('focuses the first field in the body, not the close button', () => {
+    // Close precedes the body in document order, so a panel-wide querySelector
+    // lands on it. Nobody opens a form in order to focus Close.
+    render(
+      <Modal onClose={() => {}} title="Construct Bookshelf">
+        <input aria-label="Bookshelf Name" />
+      </Modal>
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Bookshelf Name' })).toHaveFocus();
+  });
+
+  it('falls back to the panel when the body has nothing focusable', () => {
+    render(<Modal onClose={() => {}} title="Drawing…">Loading</Modal>);
+
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
+  it('does not steal focus when the parent re-renders', async () => {
+    /*
+     * The regression this file previously missed. Callers pass inline arrows
+     * for onClose, so its identity changes on every parent render — and a
+     * controlled input re-renders the parent on every keystroke. With onClose
+     * in the effect deps, each character tore the dialog down and rebuilt it:
+     * focus snapped to Close, and typing a name with a space in it then
+     * activated Close and dismissed the whole dialog.
+     */
+    function Harness() {
+      const [name, setName] = React.useState('');
+      const [open, setOpen] = React.useState(true);
+      return open ? (
+        <Modal onClose={() => setOpen(false)} title="Construct Bookshelf">
+          <input
+            aria-label="Bookshelf Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Modal>
+      ) : null;
+    }
+
+    render(<Harness />);
+    const field = screen.getByRole('textbox', { name: 'Bookshelf Name' });
+
+    await userEvent.type(field, 'Living Room Case A');
+
+    expect(field).toHaveFocus();
+    expect(field).toHaveValue('Living Room Case A');
+    // The space must not have reached a focused Close button
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
   it('returns focus to whatever opened it', async () => {
     function Harness() {
       const [open, setOpen] = React.useState(false);
