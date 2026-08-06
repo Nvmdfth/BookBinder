@@ -75,6 +75,17 @@ export function isValidUPC(code) {
 }
 
 /**
+ * The 12-digit core of a UPC-A scan, or null if the code is not a UPC.
+ *
+ * A paperback's UPC is followed by a 5-digit price add-on that changes between
+ * printings, so only the core identifies the edition.
+ */
+export function upcCore(code) {
+  const cleaned = cleanISBN(code);
+  return isValidUPC(cleaned) ? cleaned.slice(0, 12) : null;
+}
+
+/**
  * Accept either ISBN (10 or 13) or UPC-A barcode.
  */
 export function isValidBarcode(code) {

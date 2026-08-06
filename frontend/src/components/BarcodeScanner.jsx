@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, Volume2, VolumeX, AlertCircle, RefreshCw } from 'lucide-react';
-import { cleanISBN, isValidBarcode } from '../utils/isbn';
+import { cleanISBN, isValidBarcode, isValidISBN } from '../utils/isbn';
 import BookVolume from './BookVolume';
 
 /**
@@ -20,7 +20,7 @@ const BOX_H = 0.35;
 const MASK_X = `${((1 - BOX_W) / 2) * 100}%`;
 const MASK_Y = `${((1 - BOX_H) / 2) * 100}%`;
 
-export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }) {
+export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, onManualFallback }) {
   const [isActive, setIsActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -31,6 +31,7 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
   const [lookupDetails, setLookupDetails] = useState(null);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [scanError, setScanError] = useState(null);
+  const [unknownBarcode, setUnknownBarcode] = useState(null);
   
   const qrCodeRef = useRef(null);
   const isScannerPausedRef = useRef(false);
@@ -85,23 +86,36 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
     setTimeout(() => setIsPulse(false), 800);
   };
 
-  const handleScanLookup = async (isbn) => {
+  const handleScanLookup = async (barcode) => {
     isScannerPausedRef.current = true;
     setIsLookupLoading(true);
     setScanError(null);
+    setUnknownBarcode(null);
     setLookupDetails(null);
-    
+
     try {
-      const res = await fetch(`/api/books/lookup/${isbn}`);
+      const res = await fetch(`/api/books/lookup/${barcode}`);
       const data = await res.json();
-      
+
       if (res.status === 404 && data.fallbackToManual) {
+        if (data.barcodeType === 'upc') {
+          /*
+           * A UPC that the catalog has not been taught is a dead end, not a
+           * failure worth tearing the session down for — no metadata provider
+           * indexes book UPCs. Keep the camera up: the same cover usually
+           * carries an ISBN barcode that resolves in one shot.
+           */
+          setUnknownBarcode(data.barcode || barcode);
+          return;
+        }
         // Stop scanning completely and fallback to parent manual redirection tab
         await stopScanner();
-        onScanSuccess(isbn);
+        onScanSuccess(barcode);
       } else if (!res.ok) {
         throw new Error(data.error || 'Metadata lookup failed.');
       } else {
+        // A UPC withheld its "captured" signal until now (see onDecoded)
+        if (!isValidISBN(barcode)) triggerSuccessSignals();
         setLookupDetails(data);
       }
     } catch (err) {
@@ -110,6 +124,15 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
     } finally {
       setIsLookupLoading(false);
     }
+  };
+
+  /** Hand an unteachable barcode to the manual form, carrying it along to be learned. */
+  const handleEnterManually = async () => {
+    const barcode = unknownBarcode;
+    setUnknownBarcode(null);
+    await stopScanner();
+    if (onManualFallback) onManualFallback({ barcode, barcodeType: 'upc' });
+    else onScanSuccess(barcode);
   };
 
   const handleConfirmYes = () => {
@@ -129,6 +152,7 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
   const handleConfirmDismiss = () => {
     setLookupDetails(null);
     setScanError(null);
+    setUnknownBarcode(null);
     isScannerPausedRef.current = false;
     if (qrCodeRef.current) {
       try {
@@ -182,9 +206,9 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
         const onDecoded = (decodedText) => {
           if (isScannerPausedRef.current) return;
 
-          // ISBN-10/13 or valid UPC-A checksum matches count as a hit. Any invalid barcode
-          // (random product UPCs without book API match, library stickers) is ignored so the camera keeps
-          // scanning without firing a false success signal (Req 4.1.3).
+          // ISBN-10/13 or valid UPC-A checksum matches count as a hit. Anything
+          // else (library stickers, malformed reads) is ignored so the camera
+          // keeps scanning without firing a false success signal (Req 4.1.3).
           const candidate = cleanISBN(decodedText);
           if (!isValidBarcode(candidate)) return;
 
@@ -197,8 +221,15 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
               console.warn('Scan pause error:', e);
             }
           }
-          // ISBN confirmed!
-          triggerSuccessSignals();
+
+          /*
+           * A Bookland EAN is a book by construction, so it earns the "captured"
+           * buzz the instant it decodes. A UPC-A does not: it is an ordinary
+           * product code, and a cereal box satisfies the same checksum. Those
+           * wait until the lookup resolves, or the signal would tell the user
+           * "got it" for something that was never a book (Req 4.1.3).
+           */
+          if (isValidISBN(candidate)) triggerSuccessSignals();
           handleScanLookup(candidate);
         };
 
@@ -380,6 +411,38 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
                 </button>
                 <button className="btn btn-success" style={{ height: '36px', padding: '0 16px', fontSize: '0.8rem', backgroundColor: 'var(--success-color)', border: 'none', color: '#ffffff' }} onClick={handleConfirmYes}>
                   {onConfirm ? 'File it' : 'Yes, Add'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Unrecognized UPC Overlay — camera stays live behind it */}
+          {unknownBarcode && (
+            <div style={styles.confirmationOverlay}>
+              <AlertCircle size={32} style={{ color: 'var(--accent-color)' }} />
+              <p style={{ fontWeight: '700', fontSize: '0.9rem', marginTop: '4px' }}>
+                Product barcode not in your catalog
+              </p>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', maxWidth: '260px', lineHeight: '1.45' }}>
+                No book database indexes UPCs. Scan the ISBN barcode on this cover instead, or
+                enter it once and this code will be remembered for next time.
+              </p>
+              <code style={styles.barcodeChip}>{unknownBarcode}</code>
+
+              <div style={styles.confirmButtons}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ height: '36px', padding: '0 16px', fontSize: '0.8rem' }}
+                  onClick={handleConfirmDismiss}
+                >
+                  Scan Again
+                </button>
+                <button
+                  className="btn btn-primary"
+                  style={{ height: '36px', padding: '0 16px', fontSize: '0.8rem' }}
+                  onClick={handleEnterManually}
+                >
+                  Enter Manually
                 </button>
               </div>
             </div>
@@ -567,6 +630,15 @@ const styles = {
     fontSize: '0.8rem',
     color: 'var(--text-muted)',
     fontWeight: '600',
+  },
+  barcodeChip: {
+    fontFamily: 'var(--font-stamp), monospace',
+    fontSize: '0.8rem',
+    letterSpacing: '0.1em',
+    padding: '4px 10px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'rgba(255, 252, 245, 0.1)',
+    color: 'rgba(255, 252, 245, 0.85)',
   },
   confirmButtons: {
     display: 'flex',

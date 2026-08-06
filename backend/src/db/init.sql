@@ -84,3 +84,22 @@ ALTER TABLE user_books ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(50) DEFAULT 'dark';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS palette VARCHAR(50) DEFAULT 'indigo';
 
+-- 10. Barcode Alias Table: maps a scanned non-ISBN barcode to a catalog book.
+--
+-- Older mass-market paperbacks carry a UPC-A rather than a Bookland EAN, and no
+-- free metadata provider indexes book UPCs (Google Books has no upc: qualifier;
+-- OpenLibrary carries UPC identifiers on a handful of editions). The catalog
+-- therefore learns them: the first scan of an unknown UPC goes to the manual
+-- form, and the barcode entered alongside it resolves every later scan locally.
+--
+-- barcode holds the 12-digit UPC core only — the 5-digit price add-on differs
+-- between printings of the same edition and must not fragment the mapping.
+CREATE TABLE IF NOT EXISTS book_barcodes (
+    id SERIAL PRIMARY KEY,
+    barcode VARCHAR(50) UNIQUE NOT NULL,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_barcodes_book_id ON book_barcodes(book_id);
+

@@ -18,6 +18,7 @@ describe('Foundational tables (Req 4.2.2)', () => {
     'user_books',
     'shelf_shares',
     'system_settings',
+    'book_barcodes',
   ])('defines the %s table idempotently', (table) => {
     expect(normalized).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`, 'i'));
   });

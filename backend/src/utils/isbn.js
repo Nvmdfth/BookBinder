@@ -73,6 +73,18 @@ function isValidUPC(code) {
 }
 
 /**
+ * The 12-digit core of a UPC-A scan, or null if the code is not a UPC.
+ *
+ * A mass-market paperback's UPC is followed by a 5-digit price add-on that
+ * changes between printings, so only the core identifies the edition — it is
+ * the key everything stores and matches on.
+ */
+function upcCore(code) {
+  const cleaned = cleanISBN(code);
+  return isValidUPC(cleaned) ? cleaned.slice(0, 12) : null;
+}
+
+/**
  * Accept either ISBN (10 or 13) or UPC-A barcode.
  */
 function isValidBarcode(code) {
@@ -95,4 +107,5 @@ module.exports = {
   isValidISBN13,
   isValidUPC,
   isValidBarcode,
+  upcCore,
 };

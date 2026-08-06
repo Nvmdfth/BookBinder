@@ -32,7 +32,11 @@ export default function BookshelfDetails() {
   // Scanning / Creation view controls
   const [activeTab, setActiveTab] = useState('list'); // 'list', 'scan', 'manual'
   const [prefilledIsbn, setPrefilledIsbn] = useState('');
-  
+  const [manualIsbn, setManualIsbn] = useState('');
+  // A UPC-A the catalog could not resolve. Carried through the manual form so
+  // the barcode is learned against whatever book the user files it as.
+  const [scannedBarcode, setScannedBarcode] = useState('');
+
   // v1.5 Grid/List View and Reassignment States
   const [viewMode, setViewMode] = useState(() => readSetting(VIEW_MODE_KEY, 'grid'));
   const [writeableShelves, setWriteableShelves] = useState([]);
@@ -241,6 +245,32 @@ export default function BookshelfDetails() {
     }
   }, [shelf]);
 
+  /** Clear the manual form and open it, seeded with whatever the scan produced. */
+  const openManualForm = ({ isbn = '', barcode = '' } = {}) => {
+    setPrefilledIsbn(isbn);
+    setManualIsbn(isbn);
+    setScannedBarcode(barcode);
+    setManualTitle('');
+    setManualAuthor('');
+    setManualPublisher('');
+    setManualCover('');
+    setManualPages('');
+    setManualPubDate('');
+    setManualLocation('');
+    setManualNotes('');
+    setActiveTab('manual');
+  };
+
+  /**
+   * The camera handed over a UPC it could not resolve. It has already given up
+   * on the lookup, so go straight to the form — re-posting the scan would only
+   * repeat a failure the server answered instantly.
+   */
+  const handleManualFallback = ({ barcode }) => {
+    setScanMessage(null);
+    openManualForm({ barcode });
+  };
+
   const handleScanSuccess = async (isbn) => {
     setScanMessage(null);
     try {
@@ -257,18 +287,19 @@ export default function BookshelfDetails() {
       const data = await res.json();
 
       if (res.status === 404 && data.fallbackToManual) {
-        // Ingestion fail redirect fallback prefilled (Req 5.3)
-        setPrefilledIsbn(isbn);
-        setManualTitle('');
-        setManualAuthor('');
-        setManualPublisher('');
-        setManualCover('');
-        setManualPages('');
-        setManualPubDate('');
-        setManualLocation('');
-        setManualNotes('');
-        setActiveTab('manual');
-        alert('ISBN lookup timed out or failed. Prefilled details redirection loaded.');
+        // Ingestion fail redirect fallback prefilled (Req 5.3). A UPC is a
+        // product code, not a book identifier, so it is carried as a barcode to
+        // learn rather than prefilled into the ISBN field.
+        const isUpc = data.barcodeType === 'upc';
+        openManualForm({
+          isbn: isUpc ? '' : isbn,
+          barcode: isUpc ? (data.barcode || isbn) : '',
+        });
+        alert(
+          isUpc
+            ? 'That barcode is a product UPC, which no book database indexes. Enter the details once and it will be remembered.'
+            : 'ISBN lookup timed out or failed. Prefilled details redirection loaded.'
+        );
         return 'fallback';
       } else if (!res.ok) {
         throw new Error(data.error || 'Barcode ingestion failed.');
@@ -364,7 +395,8 @@ export default function BookshelfDetails() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookshelfId: id,
-          isbn: prefilledIsbn || null,
+          isbn: manualIsbn.trim() || null,
+          scannedBarcode: scannedBarcode || null,
           title: manualTitle,
           author: manualAuthor,
           publisher: manualPublisher,
@@ -403,6 +435,8 @@ export default function BookshelfDetails() {
       // Reset
       setActiveTab('list');
       setPrefilledIsbn('');
+      setManualIsbn('');
+      setScannedBarcode('');
       setManualTitle('');
       setManualAuthor('');
       setManualPublisher('');
@@ -800,6 +834,7 @@ export default function BookshelfDetails() {
           <BarcodeScanner
             onScanSuccess={handleScanSuccess}
             onConfirm={handleScanConfirm}
+            onManualFallback={handleManualFallback}
           />
 
           {scanMessage && (
@@ -896,6 +931,31 @@ export default function BookshelfDetails() {
               <span>Prefilled lookup values loaded for ISBN: <strong>{prefilledIsbn}</strong></span>
             </div>
           )}
+
+          {scannedBarcode && (
+            <div style={styles.prefilledAlert}>
+              <AlertTriangle size={18} />
+              <span>
+                Scanned barcode <strong>{scannedBarcode}</strong> is a product UPC. Add the book's
+                ISBN and details below — this barcode will be remembered, so scanning it again
+                files the book straight away.
+              </span>
+            </div>
+          )}
+
+          <div style={styles.formRow}>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label className="form-label">ISBN</label>
+              <input
+                type="text"
+                className="form-input"
+                value={manualIsbn}
+                onChange={(e) => setManualIsbn(e.target.value)}
+                placeholder="e.g. 9780547928227"
+                disabled={actionLoading}
+              />
+            </div>
+          </div>
 
           <div style={styles.formRow}>
             <div className="form-group" style={{ flex: 1 }}>

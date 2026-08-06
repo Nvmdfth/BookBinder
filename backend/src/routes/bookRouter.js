@@ -2,7 +2,7 @@ const express = require('express');
 const { query } = require('../db/db');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const { verifyBookshelfAccess, requireCollaborator } = require('../middleware/shareMiddleware');
-const { cleanISBN, isValidISBN, isValidBarcode, isValidUPC } = require('../utils/isbn');
+const { cleanISBN, isValidISBN, isValidBarcode, upcCore } = require('../utils/isbn');
 
 const router = express.Router();
 
@@ -23,9 +23,74 @@ function withTimeout(promise, ms, errorMessage = 'Operation timed out') {
 }
 
 /**
+ * Resolve a scanned barcode against the local catalog.
+ *
+ * An ISBN is matched on the books.isbn unique index directly. A UPC-A has no
+ * row of its own — it resolves through the book_barcodes alias table, keyed on
+ * the 12-digit core so a reprint with a different price add-on still matches.
+ */
+async function findCatalogBook(barcode) {
+  const direct = await query('SELECT * FROM books WHERE isbn = $1', [barcode]);
+  if (direct.rows.length > 0) return direct.rows[0];
+
+  const core = upcCore(barcode);
+  if (!core) return null;
+
+  const alias = await query(
+    `SELECT b.* FROM books b
+     JOIN book_barcodes bb ON bb.book_id = b.id
+     WHERE bb.barcode = $1`,
+    [core]
+  );
+  return alias.rows[0] || null;
+}
+
+/**
+ * Record the UPC a book was scanned under, so the next scan skips the manual form.
+ *
+ * Re-entering a barcode reassigns it: the correction the user just typed is more
+ * trustworthy than whatever the alias pointed at before.
+ */
+async function learnBarcodeAlias(barcode, bookId) {
+  const core = upcCore(barcode);
+  if (!core) return;
+
+  await query(
+    `INSERT INTO book_barcodes (barcode, book_id)
+     VALUES ($1, $2)
+     ON CONFLICT (barcode) DO UPDATE SET book_id = EXCLUDED.book_id`,
+    [core, bookId]
+  );
+  console.log(`🔖 Learned barcode ${core} for book ${bookId}`);
+}
+
+/**
+ * The 404 body that hands an unresolvable scan to the manual entry form.
+ *
+ * A UPC is flagged so the client knows not to prefill it as the ISBN — it is a
+ * product code, not a book identifier — and can send it back to be learned.
+ */
+function manualFallback(barcode, error) {
+  const core = upcCore(barcode);
+  return {
+    fallbackToManual: true,
+    isbn: barcode,
+    barcode: core || barcode,
+    barcodeType: core ? 'upc' : 'isbn',
+    error,
+  };
+}
+
+/**
  * Helper querying external metadata from Google Books and OpenLibrary
  */
 async function queryExternalISBN(isbn) {
+  // Neither provider can resolve a book UPC — Google Books has no upc: search
+  // qualifier, and OpenLibrary indexes UPC identifiers on a couple of editions.
+  // Asking them costs four sequential round trips to return nothing, so a
+  // non-ISBN barcode never reaches the network at all.
+  if (!isValidISBN(isbn)) return null;
+
   // 1. Fetch system switch settings
   const settingsRes = await query(
     "SELECT key, value FROM system_settings WHERE key IN ('enable_google_books', 'enable_open_library')"
@@ -37,60 +102,38 @@ async function queryExternalISBN(isbn) {
   });
 
   let bookData = null;
-  const isUpc = isValidUPC(isbn);
-  const upcCore = isUpc ? isbn.slice(0, 12) : null;
 
   // 2. Query Google Books first if enabled
   if (settings.enable_google_books) {
     try {
-      console.log(`🌐 Querying Google Books API for ${isUpc ? 'UPC' : 'ISBN'}: ${isbn}...`);
-      const queryParam = isUpc ? `upc:${upcCore}` : `isbn:${isbn}`;
-      let url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(queryParam)}`;
+      console.log(`🌐 Querying Google Books API for ISBN: ${isbn}...`);
+      let url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
       if (process.env.GOOGLE_BOOKS_API_KEY) {
         url += `&key=${process.env.GOOGLE_BOOKS_API_KEY}`;
       }
 
       // Execute with a 6-second timeout block (giving OpenLibrary space to execute inside the 12s overall limit)
-      let res = await withTimeout(fetch(url), 6000, 'Google Books request timed out');
-      let data = res.ok ? await res.json() : null;
+      const res = await withTimeout(fetch(url), 6000, 'Google Books request timed out');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.totalItems > 0 && data.items && data.items[0].volumeInfo) {
+          const info = data.items[0].volumeInfo;
+          console.log(`✅ Match found on Google Books: "${info.title}"`);
 
-      // Fallback query for UPC if specific upc: query returned 0 items
-      if (isUpc && (!data || data.totalItems === 0)) {
-        let fallbackUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(upcCore)}`;
-        if (process.env.GOOGLE_BOOKS_API_KEY) {
-          fallbackUrl += `&key=${process.env.GOOGLE_BOOKS_API_KEY}`;
+          bookData = {
+            isbn: isbn,
+            title: info.title || 'Unknown Title',
+            author: info.authors ? info.authors.join(', ') : 'Unknown Author',
+            publisher: info.publisher || 'Unknown Publisher',
+            cover_image_url: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail) : null,
+            page_count: info.pageCount || null,
+            publication_date: info.publishedDate || null,
+          };
         }
-        res = await withTimeout(fetch(fallbackUrl), 6000, 'Google Books fallback request timed out');
-        data = res.ok ? await res.json() : null;
-      }
-
-      if (data && data.totalItems > 0 && data.items && data.items[0].volumeInfo) {
-        const info = data.items[0].volumeInfo;
-        console.log(`✅ Match found on Google Books: "${info.title}"`);
-        
-        let resolvedIsbn = isbn;
-        if (info.industryIdentifiers) {
-          const isbn13 = info.industryIdentifiers.find(id => id.type === 'ISBN_13');
-          const isbn10 = info.industryIdentifiers.find(id => id.type === 'ISBN_10');
-          if (isbn13) resolvedIsbn = cleanISBN(isbn13.identifier);
-          else if (isbn10) resolvedIsbn = cleanISBN(isbn10.identifier);
-        }
-
-        bookData = {
-          isbn: resolvedIsbn,
-          title: info.title || 'Unknown Title',
-          author: info.authors ? info.authors.join(', ') : 'Unknown Author',
-          publisher: info.publisher || 'Unknown Publisher',
-          cover_image_url: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail) : null,
-          page_count: info.pageCount || null,
-          publication_date: info.publishedDate || null,
-        };
       } else {
-        if (res && !res.ok) {
-          console.error(`⚠️ Google Books ISBN lookup responded with status: ${res.status}`);
-          if (res.status === 429) {
-            console.error(`💡 Rate limited by Google. Consider setting a GOOGLE_BOOKS_API_KEY in your .env configuration.`);
-          }
+        console.error(`⚠️ Google Books ISBN lookup responded with status: ${res.status}`);
+        if (res.status === 429) {
+          console.error(`💡 Rate limited by Google. Consider setting a GOOGLE_BOOKS_API_KEY in your .env configuration.`);
         }
       }
     } catch (err) {
@@ -101,62 +144,31 @@ async function queryExternalISBN(isbn) {
   // 3. Fallback to OpenLibrary if no match yet and enabled
   if (!bookData && settings.enable_open_library) {
     try {
-      console.log(`🌐 Querying OpenLibrary API for ${isUpc ? 'UPC' : 'ISBN'}: ${isbn}...`);
-      const bibKey = isUpc ? `UPC:${upcCore}` : `ISBN:${isbn}`;
-      const url = `https://openlibrary.org/api/books?bibkeys=${encodeURIComponent(bibKey)}&format=json&jscmd=data`;
-      
+      console.log(`🌐 Querying OpenLibrary API for ISBN: ${isbn}...`);
+      const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
+
       const res = await withTimeout(fetch(url), 6000, 'OpenLibrary request timed out');
-      let data = res.ok ? await res.json() : null;
+      if (res.ok) {
+        const data = await res.json();
+        const bibKey = `ISBN:${isbn}`;
 
-      if (data && data[bibKey]) {
-        const info = data[bibKey];
-        console.log(`✅ Match found on OpenLibrary: "${info.title}"`);
+        if (data[bibKey]) {
+          const info = data[bibKey];
+          console.log(`✅ Match found on OpenLibrary: "${info.title}"`);
 
-        const authorsStr = info.authors ? info.authors.map(a => a.name).join(', ') : 'Unknown Author';
-        const publishersStr = info.publishers ? info.publishers.map(p => p.name).join(', ') : 'Unknown Publisher';
-        const coverUrl = info.cover ? (info.cover.large || info.cover.medium || info.cover.small) : null;
+          const authorsStr = info.authors ? info.authors.map(a => a.name).join(', ') : 'Unknown Author';
+          const publishersStr = info.publishers ? info.publishers.map(p => p.name).join(', ') : 'Unknown Publisher';
+          const coverUrl = info.cover ? (info.cover.large || info.cover.medium || info.cover.small) : null;
 
-        let resolvedIsbn = isbn;
-        if (info.identifiers) {
-          if (info.identifiers.isbn_13 && info.identifiers.isbn_13.length > 0) {
-            resolvedIsbn = cleanISBN(info.identifiers.isbn_13[0]);
-          } else if (info.identifiers.isbn_10 && info.identifiers.isbn_10.length > 0) {
-            resolvedIsbn = cleanISBN(info.identifiers.isbn_10[0]);
-          }
-        }
-
-        bookData = {
-          isbn: resolvedIsbn,
-          title: info.title || 'Unknown Title',
-          author: authorsStr,
-          publisher: publishersStr,
-          cover_image_url: coverUrl,
-          page_count: info.number_of_pages || null,
-          publication_date: info.publish_date || null,
-        };
-      } else if (isUpc) {
-        // Search Open Library by UPC query as secondary fallback
-        const searchUrl = `https://openlibrary.org/search.json?q=${encodeURIComponent(upcCore)}&limit=1`;
-        const searchRes = await withTimeout(fetch(searchUrl), 6000, 'OpenLibrary search timed out');
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          if (searchData.docs && searchData.docs.length > 0) {
-            const doc = searchData.docs[0];
-            console.log(`✅ Match found on OpenLibrary search: "${doc.title}"`);
-
-            const resolvedIsbn = doc.isbn ? cleanISBN(doc.isbn[0]) : isbn;
-            const coverUrl = doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null;
-
-            bookData = {
-              isbn: resolvedIsbn,
-              title: doc.title || 'Unknown Title',
-              author: doc.author_name ? doc.author_name.join(', ') : 'Unknown Author',
-              publisher: doc.publisher ? doc.publisher[0] : 'Unknown Publisher',
-              cover_image_url: coverUrl,
-              page_count: doc.number_of_pages_median || null,
-              publication_date: doc.first_publish_year ? String(doc.first_publish_year) : null,
-            };
-          }
+          bookData = {
+            isbn: isbn,
+            title: info.title || 'Unknown Title',
+            author: authorsStr,
+            publisher: publishersStr,
+            cover_image_url: coverUrl,
+            page_count: info.number_of_pages || null,
+            publication_date: info.publish_date || null,
+          };
         }
       }
     } catch (err) {
@@ -325,11 +337,9 @@ router.post('/scan/:isbn', async (req, res, next) => {
         const activeBookshelfId = req.shelfAccess.bookshelfId;
 
         // 2. Database Deduplication Check: Check global catalog first
-        let bookRes = await query('SELECT * FROM books WHERE isbn = $1 OR (length($1) >= 12 AND isbn = substring($1 from 1 for 12))', [isbn]);
-        let book = null;
+        let book = await findCatalogBook(isbn);
 
-        if (bookRes.rows.length > 0) {
-          book = bookRes.rows[0];
+        if (book) {
           console.log(`💾 Cache hit: retrieved "${book.title}" from local catalog index.`);
         } else {
           // 3. Fallback: Search external APIs (with 12-second total threshold)
@@ -361,21 +371,17 @@ router.post('/scan/:isbn', async (req, res, next) => {
           } catch (timeoutErr) {
             console.error('⚠️ ISBN Ingestion lookup error:', timeoutErr.message);
             // Seamlessly signal frontend to redirect to pre-populated manual forms
-            return res.status(404).json({
-              fallbackToManual: true,
-              isbn: isbn,
-              error: 'External search lookup timed out. Please enter book details manually.',
-            });
+            return res.status(404).json(
+              manualFallback(isbn, 'External search lookup timed out. Please enter book details manually.')
+            );
           }
         }
 
         // 4. Ingestion Fail: Book not resolved via caching or external lookup
         if (!book) {
-          return res.status(404).json({
-            fallbackToManual: true,
-            isbn: isbn,
-            error: 'Book details not found. Please enter details manually.',
-          });
+          return res.status(404).json(
+            manualFallback(isbn, 'Book details not found. Please enter details manually.')
+          );
         }
 
         // 5. Prevent identical double map inside same shelf
@@ -434,6 +440,7 @@ router.post('/manual', async (req, res) => {
     publicationDate,
     physicalLocation,
     notes,
+    scannedBarcode,
   } = req.body;
 
   if (!title || title.trim() === '') {
@@ -497,6 +504,11 @@ router.post('/manual', async (req, res) => {
           );
           book = insertRes.rows[0];
         }
+
+        // 3b. Learn the barcode this entry came from. A UPC-A cannot be resolved
+        // by any provider, so the only way the next scan of this paperback skips
+        // this form is by remembering what the user just told us.
+        await learnBarcodeAlias(scannedBarcode, book.id);
 
         // 4. Prevent duplicate bookshelf mapping
         const mapCheck = await query(
@@ -730,11 +742,9 @@ router.get('/lookup/:isbn', async (req, res) => {
 
   try {
     // 1. Check local catalog cache first
-    let bookRes = await query('SELECT * FROM books WHERE isbn = $1 OR (length($1) >= 12 AND isbn = substring($1 from 1 for 12))', [isbn]);
-    let book = null;
+    let book = await findCatalogBook(isbn);
 
-    if (bookRes.rows.length > 0) {
-      book = bookRes.rows[0];
+    if (book) {
       console.log(`💾 Lookup cache hit: retrieved "${book.title}"`);
     } else {
       // 2. Lookup externally
@@ -765,20 +775,12 @@ router.get('/lookup/:isbn', async (req, res) => {
         }
       } catch (timeoutErr) {
         console.error('⚠️ ISBN Lookup query timeout:', timeoutErr.message);
-        return res.status(404).json({
-          fallbackToManual: true,
-          isbn: isbn,
-          error: 'External search lookup timed out.',
-        });
+        return res.status(404).json(manualFallback(isbn, 'External search lookup timed out.'));
       }
     }
 
     if (!book) {
-      return res.status(404).json({
-        fallbackToManual: true,
-        isbn: isbn,
-        error: 'Book details not found.',
-      });
+      return res.status(404).json(manualFallback(isbn, 'Book details not found.'));
     }
 
     return res.json(book);
