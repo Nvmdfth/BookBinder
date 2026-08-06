@@ -35,7 +35,34 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
   
   const qrCodeRef = useRef(null);
   const isScannerPausedRef = useRef(false);
+  const tornDownRef = useRef(new WeakSet());
   const scannerContainerId = 'bookbinder-scanner-view';
+
+  /**
+   * Stop the camera, at most once per scanner instance.
+   *
+   * html5-qrcode's stop() throws *synchronously* — a bare string, before any
+   * promise exists — when the scanner is already stopping ("Cannot transition
+   * to a new state, already under transition") or already stopped, so a
+   * trailing .catch() never sees it. Both of this component's cleanups run
+   * against the same instance on unmount, and the library only clears its
+   * isScanning flag once the camera has actually closed, so the second call
+   * used to land mid-transition and throw. An exception escaping an effect
+   * cleanup unmounts React's entire tree: header, navigation and all, the
+   * whole page goes blank while the work that triggered it has already been
+   * saved.
+   */
+  const teardownCamera = async (instance) => {
+    if (!instance || tornDownRef.current.has(instance)) return;
+    tornDownRef.current.add(instance);
+
+    try {
+      await instance.stop();
+    } catch (err) {
+      // Teardown is best-effort: the stream is being discarded either way.
+      console.warn('Camera teardown:', err);
+    }
+  };
 
   useEffect(() => {
     // Check vibration support
@@ -274,32 +301,22 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
       
       return () => {
         clearTimeout(timer);
-        if (html5Qrcode && html5Qrcode.isScanning) {
-          html5Qrcode.stop().catch(console.error);
-        }
+        teardownCamera(html5Qrcode);
       };
     }
   }, [isActive]);
 
   const stopScanner = async () => {
     isScannerPausedRef.current = false;
-    if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-      try {
-        await qrCodeRef.current.stop();
-        qrCodeRef.current = null;
-      } catch (err) {
-        console.error('Error stopping camera:', err);
-      }
-    }
+    await teardownCamera(qrCodeRef.current);
+    qrCodeRef.current = null;
     setIsActive(false);
   };
 
   // Auto clean up camera stream on unmount
   useEffect(() => {
     return () => {
-      if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-        qrCodeRef.current.stop().catch(console.error);
-      }
+      teardownCamera(qrCodeRef.current);
     };
   }, []);
 
