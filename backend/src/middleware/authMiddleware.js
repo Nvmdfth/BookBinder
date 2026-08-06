@@ -51,6 +51,20 @@ async function authenticateToken(req, res, next) {
       role: dbUser.role,
     };
 
+    if (decoded.impersonatorId) {
+      const impRes = await query(
+        'SELECT id, email, role, is_disabled FROM users WHERE id = $1',
+        [decoded.impersonatorId]
+      );
+      if (impRes.rows.length > 0 && impRes.rows[0].role === 'admin' && !impRes.rows[0].is_disabled) {
+        req.user.impersonator = {
+          id: impRes.rows[0].id,
+          email: impRes.rows[0].email,
+          role: impRes.rows[0].role,
+        };
+      }
+    }
+
     next();
   } catch (error) {
     console.error('JWT Authentication Error:', error.message);

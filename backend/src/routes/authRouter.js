@@ -226,10 +226,136 @@ router.get('/me', authenticateToken, async (req, res) => {
       avatarUrl: user.avatar_url,
       theme: user.theme,
       palette: user.palette,
+      isImpersonating: !!req.user.impersonator,
+      impersonator: req.user.impersonator || null,
     });
   } catch (error) {
     console.error('Verify Me Error:', error);
     return res.status(500).json({ error: 'Internal server error resolving user details.' });
+  }
+});
+
+/**
+ * POST /api/auth/impersonate/:userId - Admin Impersonate User
+ */
+router.post('/impersonate/:userId', authenticateToken, async (req, res) => {
+  try {
+    const adminId = req.user.impersonator ? req.user.impersonator.id : req.user.id;
+    const adminRole = req.user.impersonator ? req.user.impersonator.role : req.user.role;
+
+    if (adminRole !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden. Administrative privileges required to impersonate.' });
+    }
+
+    const targetUserId = parseInt(req.params.userId, 10);
+    if (isNaN(targetUserId)) {
+      return res.status(400).json({ error: 'Invalid target user ID.' });
+    }
+
+    if (targetUserId === adminId) {
+      return res.status(400).json({ error: 'Cannot impersonate your own account.' });
+    }
+
+    const targetRes = await query(
+      'SELECT id, email, role, password_hash, is_disabled, avatar_url, theme, palette FROM users WHERE id = $1',
+      [targetUserId]
+    );
+
+    if (targetRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Target user not found.' });
+    }
+
+    const targetUser = targetRes.rows[0];
+    if (targetUser.is_disabled) {
+      return res.status(400).json({ error: 'Cannot impersonate a disabled user account.' });
+    }
+
+    const pwdSig = targetUser.password_hash.slice(-10);
+    const token = jwt.sign(
+      { userId: targetUser.id, impersonatorId: adminId, pwdSig },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    await ensureUserWishlist(targetUser.id);
+
+    return res.json({
+      message: `Impersonating ${targetUser.email}.`,
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        role: targetUser.role,
+        avatarUrl: targetUser.avatar_url,
+        theme: targetUser.theme,
+        palette: targetUser.palette,
+        isImpersonating: true,
+        impersonator: req.user.impersonator || { id: req.user.id, email: req.user.email, role: req.user.role },
+      },
+    });
+  } catch (error) {
+    console.error('Impersonate Error:', error);
+    return res.status(500).json({ error: 'Internal server error processing impersonation.' });
+  }
+});
+
+/**
+ * POST /api/auth/unimpersonate - End Impersonation Session
+ */
+router.post('/unimpersonate', authenticateToken, async (req, res) => {
+  try {
+    if (!req.user.impersonator) {
+      return res.status(400).json({ error: 'Not currently in an impersonation session.' });
+    }
+
+    const adminId = req.user.impersonator.id;
+    const adminRes = await query(
+      'SELECT id, email, role, password_hash, is_disabled, avatar_url, theme, palette FROM users WHERE id = $1',
+      [adminId]
+    );
+
+    if (adminRes.rows.length === 0 || adminRes.rows[0].is_disabled) {
+      res.clearCookie('token');
+      return res.status(401).json({ error: 'Original administrator account is no longer valid.' });
+    }
+
+    const adminUser = adminRes.rows[0];
+    const pwdSig = adminUser.password_hash.slice(-10);
+    const token = jwt.sign(
+      { userId: adminUser.id, pwdSig },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.json({
+      message: 'Returned to main profile.',
+      user: {
+        id: adminUser.id,
+        email: adminUser.email,
+        role: adminUser.role,
+        avatarUrl: adminUser.avatar_url,
+        theme: adminUser.theme,
+        palette: adminUser.palette,
+        isImpersonating: false,
+        impersonator: null,
+      },
+    });
+  } catch (error) {
+    console.error('Unimpersonate Error:', error);
+    return res.status(500).json({ error: 'Internal server error ending impersonation.' });
   }
 });
 

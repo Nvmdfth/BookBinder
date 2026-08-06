@@ -105,6 +105,38 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const impersonateUser = async (targetUserId) => {
+    const res = await fetch(`/api/auth/impersonate/${targetUserId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to start impersonation session.');
+    }
+
+    setUser(data.user);
+    setIsAuthenticated(true);
+    return data.user;
+  };
+
+  const stopImpersonation = async () => {
+    const res = await fetch('/api/auth/unimpersonate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to end impersonation session.');
+    }
+
+    setUser(data.user);
+    setIsAuthenticated(true);
+    return data.user;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -117,7 +149,11 @@ export function AuthProvider({ children }) {
         updateProfile,
         updateAvatarUrl,
         updateUserPreferences,
-        isAdmin: user?.role === 'admin',
+        impersonateUser,
+        stopImpersonation,
+        isAdmin: user?.role === 'admin' || user?.impersonator?.role === 'admin',
+        isImpersonating: !!user?.isImpersonating,
+        impersonator: user?.impersonator || null,
       }}
     >
       {children}

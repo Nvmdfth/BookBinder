@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthProvider';
 import {
   ShieldAlert, Settings, Lock, Unlock, Trash2, Users,
   BookOpen, AlertCircle, CheckCircle, Database, Key,
-  X, Copy, UserCheck, UserMinus, ShieldCheck, Library
+  X, Copy, UserCheck, UserMinus, ShieldCheck, Library, LogIn
 } from 'lucide-react';
 
 /**
@@ -46,7 +47,17 @@ function SettingSwitch({ name, desc, on, status, onToggle }) {
 }
 
 export default function AdminConsole() {
-  const { user: currentUser, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { user: currentUser, isAdmin, impersonateUser } = useAuth();
+
+  const handleImpersonateUser = async (targetUser) => {
+    try {
+      await impersonateUser(targetUser.id);
+      navigate('/dashboard');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
   
   // Settings values
   const [settings, setSettings] = useState({
@@ -500,6 +511,25 @@ export default function AdminConsole() {
                             <span style={styles.shieldedLabel}>Shielded</span>
                           ) : (
                             <>
+                              {/* Impersonate User */}
+                              <button
+                                className="btn btn-secondary"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 10px',
+                                  fontSize: '0.8rem',
+                                  marginRight: '6px',
+                                }}
+                                onClick={() => handleImpersonateUser(u)}
+                                disabled={u.is_disabled}
+                                title={u.is_disabled ? 'Cannot impersonate disabled user' : `Impersonate ${u.email}`}
+                              >
+                                <LogIn size={14} />
+                                <span>Impersonate</span>
+                              </button>
+
                               {/* Enable/Disable Toggle */}
                               <button
                                 style={{

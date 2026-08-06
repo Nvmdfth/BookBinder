@@ -5,13 +5,13 @@ import { useTheme } from '../context/ThemeProvider';
 import { readSetting, writeSetting } from '../utils/storage';
 import {
   BookMarked, User, ShieldAlert, Sun, Moon, LogOut,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, UserCheck, ArrowLeft,
 } from 'lucide-react';
 
 const RAIL_KEY = 'bookbinder_nav_collapsed';
 
 export default function Layout({ children }) {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isImpersonating, stopImpersonation } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,6 +30,15 @@ export default function Layout({ children }) {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleStopImpersonation = async () => {
+    try {
+      await stopImpersonation();
+      navigate('/admin');
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   // Initials for the avatar fallback
@@ -155,6 +164,24 @@ export default function Layout({ children }) {
       </header>
 
       <main className="app-main">
+        {isImpersonating && (
+          <div style={styles.impersonationBanner} role="alert">
+            <div style={styles.impersonationBannerContent}>
+              <UserCheck size={18} style={{ color: 'var(--warning-color)' }} />
+              <span>
+                Currently Impersonating <strong>{user?.email}</strong>.
+              </span>
+            </div>
+            <button
+              className="btn btn-secondary"
+              style={styles.switchBackBtn}
+              onClick={handleStopImpersonation}
+            >
+              <ArrowLeft size={16} />
+              <span>Switch back to main profile</span>
+            </button>
+          </div>
+        )}
         <div className="app-content">{children}</div>
       </main>
 
@@ -252,5 +279,32 @@ const styles = {
     minHeight: '44px',
     minWidth: '44px',
     padding: '8px',
+  },
+  impersonationBanner: {
+    background: 'color-mix(in srgb, var(--warning-color) 12%, var(--bg-primary))',
+    borderBottom: '2px dashed var(--warning-color)',
+    padding: '10px 20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '12px',
+    position: 'sticky',
+    top: 0,
+    zIndex: 90,
+  },
+  impersonationBannerContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '0.9rem',
+    color: 'var(--text-primary)',
+  },
+  switchBackBtn: {
+    padding: '4px 12px',
+    fontSize: '0.82rem',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
   },
 };
