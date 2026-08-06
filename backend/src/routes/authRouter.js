@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db/db');
 const { authenticateToken, JWT_SECRET } = require('../middleware/authMiddleware');
+const { sessionCookieAttributes, sessionCookieOptions } = require('../utils/sessionCookie');
 
 const router = express.Router();
 
@@ -136,12 +137,7 @@ router.post('/login', async (req, res) => {
     );
 
     // 5. Deliver Cookie (30 days lifespan persistent)
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
-    });
+    res.cookie('token', token, sessionCookieOptions(req));
 
     // Seed the default wishlist shelf if missing on login!
     await ensureUserWishlist(user.id);
@@ -170,11 +166,7 @@ router.post('/login', async (req, res) => {
 router.post('/logout', (req, res) => {
   // Attributes must match those used when the cookie was issued, otherwise
   // browsers keep the original cookie and the session survives logout.
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-  });
+  res.clearCookie('token', sessionCookieAttributes(req));
   return res.json({ message: 'Session closed successfully.' });
 });
 
@@ -277,12 +269,7 @@ router.post('/impersonate/:userId', authenticateToken, async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('token', token, sessionCookieOptions(req));
 
     await ensureUserWishlist(targetUser.id);
 
@@ -333,12 +320,7 @@ router.post('/unimpersonate', authenticateToken, async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('token', token, sessionCookieOptions(req));
 
     return res.json({
       message: 'Returned to main profile.',

@@ -20,6 +20,16 @@ const settingsRouter = require('./routes/settingsRouter');
 function createApp() {
   const app = express();
 
+  /*
+   * Honour X-Forwarded-Proto so req.secure reflects the browser's connection
+   * rather than the last hop. The session cookie's Secure flag is derived from
+   * it, and behind a TLS-terminating proxy the socket itself is plain HTTP.
+   *
+   * Spoofing the header only makes a client's own cookie more restrictive, so
+   * trusting it costs nothing here.
+   */
+  app.set('trust proxy', true);
+
   // Enforce modern security middlewares
   app.use(cors({
     origin: process.env.CORS_ORIGIN || true, // Trust origin headers dynamically in local dev
