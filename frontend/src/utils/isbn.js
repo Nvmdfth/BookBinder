@@ -50,6 +50,39 @@ export function isValidISBN13(isbn) {
 }
 
 /**
+ * Validate a 12-digit UPC-A barcode (or 17-digit UPC-A + 5-digit extension).
+ */
+export function isValidUPC(code) {
+  if (!code) return false;
+  const str = String(code).trim();
+  if (!/^\d{12}(\d{5})?$/.test(str)) return false;
+
+  const upc12 = str.slice(0, 12);
+  if (/^(\d)\1+$/.test(upc12)) return false;
+
+  let oddSum = 0;
+  let evenSum = 0;
+  for (let i = 0; i < 11; i++) {
+    const digit = Number(upc12[i]);
+    if (i % 2 === 0) {
+      oddSum += digit;
+    } else {
+      evenSum += digit;
+    }
+  }
+  const check = (10 - ((oddSum * 3 + evenSum) % 10)) % 10;
+  return check === Number(upc12[11]);
+}
+
+/**
+ * Accept either ISBN (10 or 13) or UPC-A barcode.
+ */
+export function isValidBarcode(code) {
+  const cleaned = cleanISBN(code);
+  return isValidISBN10(cleaned) || isValidISBN13(cleaned) || isValidUPC(cleaned);
+}
+
+/**
  * Accept either ISBN form. Input may be raw (hyphenated/spaced) — it is cleaned first.
  */
 export function isValidISBN(isbn) {

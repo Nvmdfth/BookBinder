@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, Volume2, VolumeX, AlertCircle, RefreshCw } from 'lucide-react';
-import { cleanISBN, isValidISBN } from '../utils/isbn';
+import { cleanISBN, isValidBarcode } from '../utils/isbn';
 import BookVolume from './BookVolume';
 
 /**
@@ -182,11 +182,11 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError }
         const onDecoded = (decodedText) => {
           if (isScannerPausedRef.current) return;
 
-          // Only ISBN-10/13 checksum matches count as a hit. Any other barcode
-          // (product UPCs, library stickers) is ignored so the camera keeps
+          // ISBN-10/13 or valid UPC-A checksum matches count as a hit. Any invalid barcode
+          // (random product UPCs without book API match, library stickers) is ignored so the camera keeps
           // scanning without firing a false success signal (Req 4.1.3).
           const candidate = cleanISBN(decodedText);
-          if (!isValidISBN(candidate)) return;
+          if (!isValidBarcode(candidate)) return;
 
           isScannerPausedRef.current = true;
 
