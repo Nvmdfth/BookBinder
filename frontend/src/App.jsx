@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthProvider';
 import { ThemeProvider, useTheme } from './context/ThemeProvider';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import { createTheme, ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -198,6 +199,7 @@ export default function App() {
       <ThemeProvider>
         <MUIThemeBridge>
           <BrowserRouter>
+            <ErrorBoundary>
             <Routes>
               {/* Authentications Entry Portals */}
               <Route 
@@ -257,6 +259,7 @@ export default function App() {
               {/* Catch-all navigation fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </ErrorBoundary>
           </BrowserRouter>
         </MUIThemeBridge>
       </ThemeProvider>
