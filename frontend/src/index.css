@@ -632,7 +632,8 @@ select.form-input {
   min-height: 100vh;
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   transition: margin-left 0.22s cubic-bezier(0.32, 0.72, 0.3, 1);
 }
 
