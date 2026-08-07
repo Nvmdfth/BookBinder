@@ -9,7 +9,7 @@
  */
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
-const { app, mockSql } = require('./helpers/testApp');
+const { app, mockSql, authCookie } = require('./helpers/testApp');
 
 const LOGIN_LOOKUP = /SELECT id, email, password_hash, role, avatar_url, is_disabled/;
 const WISHLIST_CHECK = /FROM bookshelves WHERE user_id = \$1 AND is_wishlist/;
@@ -72,6 +72,37 @@ describe('Session cookie Secure attribute', () => {
       expect(cookie).toMatch(/HttpOnly/i);
       expect(cookie).toMatch(/SameSite=Strict/i);
     }
+  });
+
+  it('reissues the cookie after a password change without stranding the client', async () => {
+    /*
+     * Changing a password mints a fresh token so the current device stays
+     * signed in. Stamping Secure on that one over plain HTTP throws the user
+     * straight out — the browser drops the replacement, and the old cookie's
+     * signature no longer matches the new hash.
+     */
+    process.env.NODE_ENV = 'production';
+
+    const hash = await bcrypt.hash('correct-horse', 10);
+    mockSql([
+      [/SELECT email, password_hash, role, avatar_url FROM users WHERE id/, [{
+        email: 'owner@library.com',
+        password_hash: hash,
+        role: 'user',
+        avatar_url: null,
+      }]],
+      [/UPDATE users SET email/, []],
+    ]);
+
+    const res = await request(app)
+      .put('/api/users/profile')
+      .set('Cookie', authCookie('owner'))
+      .send({ currentPassword: 'correct-horse', newPassword: 'a-brand-new-one' });
+
+    expect(res.status).toBe(200);
+    expect(tokenCookie(res)).toBeDefined();
+    expect(tokenCookie(res)).not.toMatch(/Secure/i);
+    expect(tokenCookie(res)).toMatch(/HttpOnly/i);
   });
 
   it('clears the session with attributes matching the issued cookie', async () => {

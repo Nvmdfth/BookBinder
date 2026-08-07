@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db/db');
 const { authenticateToken, JWT_SECRET } = require('../middleware/authMiddleware');
+const { sessionCookieOptions } = require('../utils/sessionCookie');
 
 const router = express.Router();
 
@@ -110,12 +111,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
         { expiresIn: '30d' }
       );
 
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 30 * 24 * 60 * 60 * 1000,
-      });
+      res.cookie('token', token, sessionCookieOptions(req));
     }
 
     return res.json({
