@@ -48,11 +48,25 @@ function isValidISBN13(isbn) {
 }
 
 /**
- * Validate a 12-digit UPC-A barcode (or 17-digit UPC-A + 5-digit extension).
+ * Reduce a scan to the UPC-A digits as printed.
+ *
+ * Decoders disagree about UPC-A: some report the 12 printed digits, others the
+ * EAN-13 equivalent with a leading zero. Both denote the same product code, so
+ * the zero is dropped before anything else looks at the number. ISBN-13 is
+ * unaffected — Bookland is a 978/979 prefix, never a leading zero.
+ */
+function stripEanPrefix(code) {
+  const str = String(code || '').trim();
+  return /^0\d{12}(\d{5})?$/.test(str) ? str.slice(1) : str;
+}
+
+/**
+ * Validate a 12-digit UPC-A barcode (or 17-digit UPC-A + 5-digit extension),
+ * in either the bare or the leading-zero EAN-13 form.
  */
 function isValidUPC(code) {
   if (!code) return false;
-  const str = String(code).trim();
+  const str = stripEanPrefix(code);
   if (!/^\d{12}(\d{5})?$/.test(str)) return false;
 
   const upc12 = str.slice(0, 12);
@@ -80,7 +94,7 @@ function isValidUPC(code) {
  * the key everything stores and matches on.
  */
 function upcCore(code) {
-  const cleaned = cleanISBN(code);
+  const cleaned = stripEanPrefix(cleanISBN(code));
   return isValidUPC(cleaned) ? cleaned.slice(0, 12) : null;
 }
 

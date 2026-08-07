@@ -64,6 +64,35 @@ describe('UPC Barcode Validation & Lookup', () => {
     });
   });
 
+  describe('UPC-A reported in EAN-13 form', () => {
+    /*
+     * Decoders disagree about UPC-A: some hand back the 12 printed digits,
+     * others the EAN-13 equivalent with a leading zero. Both denote the same
+     * product code, and rejecting the second form means a scan where nothing
+     * happens at all — no overlay, no beep, the camera simply keeps looking.
+     */
+    const EAN_FORM = `0${UPC}`;
+
+    it('accepts a UPC-A carrying its leading EAN zero', () => {
+      expect(isValidUPC(EAN_FORM)).toBe(true);
+    });
+
+    it('resolves both forms to the same 12-digit core', () => {
+      expect(upcCore(EAN_FORM)).toBe(UPC);
+      expect(upcCore(`0${UPC_WITH_PRICE}`)).toBe(UPC);
+    });
+
+    it('still rejects a 13-digit code that is not a valid UPC underneath', () => {
+      expect(isValidUPC('0070993005994')).toBe(false);
+    });
+
+    it('leaves ISBN-13 alone, which is a distinct 978/979 prefix', () => {
+      expect(isValidUPC('9780446401876')).toBe(false);
+      expect(upcCore('9780446401876')).toBeNull();
+      expect(isValidBarcode('9780446401876')).toBe(true);
+    });
+  });
+
   describe('upcCore', () => {
     it('returns the 12-digit core of a bare UPC', () => {
       expect(upcCore(UPC)).toBe(UPC);

@@ -52,6 +52,19 @@ describe('Frontend UPC Barcode Validation', () => {
     expect(upcCore('07099300599340187')).toBe(UPC);
     expect(upcCore(ISBN13)).toBeNull();
   });
+
+  // Some decoders report UPC-A as its EAN-13 equivalent, with a leading zero.
+  // Rejecting that form is a scan where nothing at all happens.
+  it('accepts UPC-A in the leading-zero EAN-13 form', () => {
+    expect(isValidUPC(`0${UPC}`)).toBe(true);
+    expect(isValidBarcode(`0${UPC}`)).toBe(true);
+    expect(upcCore(`0${UPC}`)).toBe(UPC);
+  });
+
+  it('does not mistake an ISBN-13 for a zero-prefixed UPC', () => {
+    expect(isValidUPC(ISBN13)).toBe(false);
+    expect(upcCore(ISBN13)).toBeNull();
+  });
 });
 
 describe('BarcodeScanner UPC handling', () => {
