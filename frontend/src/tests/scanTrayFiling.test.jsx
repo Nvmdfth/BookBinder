@@ -111,6 +111,10 @@ describe('Filing a scan tray into a shelf', () => {
     await waitFor(() => expect(screen.getByText('Wishlist')).toBeInTheDocument());
     expect(screen.getAllByText('Mucho Mojo').length).toBeGreaterThan(0);
 
+    // Filing leaves the scanner tab on the same tick, so a confirmation that
+    // renders only inside that tab is never seen
+    expect(screen.getByText(/filed 1 volume into wishlist/i)).toBeInTheDocument();
+
     const crash = errorSpy.mock.calls.find((c) => String(c[0]).match(/error|exception/i));
     expect(crash, `render crashed: ${crash && crash[0]}`).toBeUndefined();
   });

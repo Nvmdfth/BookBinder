@@ -719,6 +719,23 @@ export default function BookshelfDetails() {
         </div>
       )}
 
+      {/*
+        Outside the tab blocks on purpose. Filing a run reports its result and
+        then leaves for the shelf listing on the same tick, so a message that
+        lived inside the scanner tab was set and hidden without ever being
+        seen — a whole run filed with no acknowledgement.
+      */}
+      {scanMessage && (
+        <div style={{
+          ...styles.scanMessage,
+          backgroundColor: scanMessage.type === 'success' ? 'color-mix(in srgb, var(--success-color) 11%, transparent)' : 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
+          color: scanMessage.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
+        }}>
+          {scanMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+          <span>{scanMessage.text}</span>
+        </div>
+      )}
+
       {/* 🔍 Search & Add Wildcard Books Tab (Req 1.2 Search) */}
       {isCollaborator && activeTab === 'search' && (
         <div style={styles.searchForm} className="card">
@@ -836,17 +853,6 @@ export default function BookshelfDetails() {
             onConfirm={handleScanConfirm}
             onManualFallback={handleManualFallback}
           />
-
-          {scanMessage && (
-            <div style={{
-              ...styles.scanMessage,
-              backgroundColor: scanMessage.type === 'success' ? 'color-mix(in srgb, var(--success-color) 11%, transparent)' : 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
-              color: scanMessage.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
-            }}>
-              {scanMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
-              <span>{scanMessage.text}</span>
-            </div>
-          )}
 
           {/* Session tray — the run so far, filed in one go */}
           <div className="card" style={styles.tray}>
