@@ -626,7 +626,7 @@ export default function BookshelfDetails() {
   if (error) {
     return (
       <div style={styles.errorContainer} className="card error-shake">
-        <AlertTriangle size={32} style={{ color: 'var(--danger-color)' }} />
+        <AlertTriangle size={32} style={{ color: 'var(--danger-text)' }} />
         <h3>Access Denied</h3>
         <p>{error}</p>
         <button className="btn btn-secondary" onClick={() => navigate('/')}>
@@ -762,7 +762,7 @@ export default function BookshelfDetails() {
           </form>
 
           {searchError && (
-            <div style={{ ...styles.scanMessage, backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)', color: 'var(--danger-color)', alignSelf: 'stretch', maxWidth: 'none' }}>
+            <div style={{ ...styles.scanMessage, backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)', color: 'var(--danger-text)', alignSelf: 'stretch', maxWidth: 'none' }}>
               <AlertTriangle size={18} />
               <span>{searchError}</span>
             </div>
@@ -1330,7 +1330,7 @@ export default function BookshelfDetails() {
                         <Pencil size={16} />
                       </button>
                       <button 
-                        style={{ ...styles.cardActionBtn, color: 'var(--danger-color)' }} 
+                        style={{ ...styles.cardActionBtn, color: 'var(--danger-text)' }} 
                         onClick={() => handleDeleteMapping(b.mapping_id)}
                         title="Remove book from shelf"
                       >
@@ -1454,7 +1454,7 @@ export default function BookshelfDetails() {
                       </button>
                       <button
                         className="btn btn-secondary"
-                        style={{ color: 'var(--danger-color)' }}
+                        style={{ color: 'var(--danger-text)' }}
                         onClick={() => {
                           setViewingBook(null);
                           handleDeleteMapping(b.mapping_id);
@@ -2087,7 +2087,7 @@ const styles = {
   revokeShareBtn: {
     background: 'none',
     border: 'none',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     cursor: 'pointer',
     padding: '4px',
     display: 'flex',
@@ -2194,7 +2194,7 @@ const styles = {
   },
   sourceOpenLibrary: {
     backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     border: '1px solid color-mix(in srgb, var(--danger-color) 22%, transparent)',
   },
   skeletonList: {

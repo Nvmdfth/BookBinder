@@ -454,7 +454,7 @@ button, input, textarea, select {
 
 .stamp-success { color: var(--success-color); }
 .stamp-warning { color: var(--warning-color); }
-.stamp-danger  { color: var(--danger-color); }
+.stamp-danger  { color: var(--danger-text); }
 .stamp-muted   { color: var(--text-muted); }
 
 /* Solid variant for counts and primary figures */

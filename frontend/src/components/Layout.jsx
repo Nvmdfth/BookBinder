@@ -154,7 +154,7 @@ export default function Layout({ children }) {
           </button>
           <button
             className="btn btn-ghost"
-            style={{ ...styles.iconBtn, color: 'var(--danger-color)' }}
+            style={{ ...styles.iconBtn, color: 'var(--danger-text)' }}
             onClick={handleLogout}
             aria-label="Sign out"
           >

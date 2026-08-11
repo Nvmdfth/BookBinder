@@ -282,7 +282,7 @@ export default function AdminConsole() {
   if (!isAdmin) {
     return (
       <div style={styles.errorContainer} className="card error-shake">
-        <ShieldAlert size={44} style={{ color: 'var(--danger-color)' }} />
+        <ShieldAlert size={44} style={{ color: 'var(--danger-text)' }} />
         <h2>Privilege Access Violation</h2>
         <p>Forbidden. This console settings area requires administrative credentials access parameters.</p>
       </div>
@@ -568,7 +568,7 @@ export default function AdminConsole() {
 
                               {/* Cascade Delete User */}
                               <button
-                                style={{ ...styles.actionIconBtn, color: 'var(--danger-color)' }}
+                                style={{ ...styles.actionIconBtn, color: 'var(--danger-text)' }}
                                 onClick={() => {
                                   setDeletingUser(u);
                                   setDeleteEmailConfirm('');
@@ -655,7 +655,7 @@ export default function AdminConsole() {
         <div style={styles.modalOverlay}>
           <div style={styles.modalCard} className="card error-shake">
             <div style={styles.modalHeader}>
-              <h3 style={{ ...styles.modalTitle, color: 'var(--danger-color)' }}>⚠️ Permanent Cascade Deletion</h3>
+              <h3 style={{ ...styles.modalTitle, color: 'var(--danger-text)' }}>⚠️ Permanent Cascade Deletion</h3>
               <button style={styles.closeModalBtn} onClick={() => setDeletingUser(null)}>
                 <X size={20} />
               </button>
@@ -747,7 +747,7 @@ const styles = {
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     fontSize: '0.85rem',
     fontWeight: '600',
   },
@@ -1059,7 +1059,7 @@ const styles = {
   },
   badgeDisabled: {
     backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
   },
   actionsCell: {
     display: 'flex',
@@ -1145,7 +1145,7 @@ const styles = {
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'color-mix(in srgb, var(--danger-color) 9%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     border: '1px solid color-mix(in srgb, var(--danger-color) 18%, transparent)',
   },
   dangerSummaryTitle: {

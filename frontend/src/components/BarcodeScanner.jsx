@@ -468,8 +468,8 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
           {/* v1.4 Scan Error Overlay */}
           {scanError && (
             <div style={styles.confirmationOverlay}>
-              <AlertCircle size={36} style={{ color: 'var(--danger-color)' }} />
-              <p style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--danger-color)', maxWidth: '240px', marginTop: '8px' }}>{scanError}</p>
+              <AlertCircle size={36} style={{ color: 'var(--danger-text)' }} />
+              <p style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--danger-text)', maxWidth: '240px', marginTop: '8px' }}>{scanError}</p>
               <button className="btn btn-secondary" style={{ height: '36px', padding: '0 16px', fontSize: '0.85rem', marginTop: '12px' }} onClick={handleConfirmDismiss}>
                 Scan Again
               </button>
@@ -518,7 +518,7 @@ const styles = {
     padding: '12px 16px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     fontSize: '0.85rem',
     textAlign: 'left',
     marginTop: '8px',

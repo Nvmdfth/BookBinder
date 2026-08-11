@@ -38,7 +38,7 @@ export default class ErrorBoundary extends React.Component {
     return (
       <div style={styles.wrapper}>
         <div style={styles.card} className="card">
-          <AlertTriangle size={34} style={{ color: 'var(--danger-color)' }} />
+          <AlertTriangle size={34} style={{ color: 'var(--danger-text)' }} />
           <h2 style={styles.title}>Something broke on this screen</h2>
           <p style={styles.desc}>
             Your data is safe — anything already saved was saved. Reload to carry on.
@@ -88,7 +88,7 @@ const styles = {
     padding: '10px 12px',
     borderRadius: 'var(--radius-sm)',
     backgroundColor: 'var(--surface-raised)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     fontSize: '0.75rem',
     lineHeight: '1.45',
     textAlign: 'left',

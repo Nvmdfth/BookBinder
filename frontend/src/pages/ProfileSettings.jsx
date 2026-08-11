@@ -567,7 +567,7 @@ export default function ProfileSettings() {
             <div style={{ ...styles.divider, margin: '24px 0 16px 0' }}></div>
 
             <div className="form-group">
-              <label className="form-label" style={{ color: 'var(--danger-color)' }}>Current Password *</label>
+              <label className="form-label" style={{ color: 'var(--danger-text)' }}>Current Password *</label>
               <input 
                 type="password" 
                 className="form-input"
@@ -984,11 +984,11 @@ export default function ProfileSettings() {
                               )}
                               {status === 'error' && (
                                 <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                  <span style={{ ...styles.statusTag, backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)', color: 'var(--danger-color)' }}>
+                                  <span style={{ ...styles.statusTag, backgroundColor: 'color-mix(in srgb, var(--danger-color) 11%, transparent)', color: 'var(--danger-text)' }}>
                                     <AlertCircle size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
                                     <span>Failed</span>
                                   </span>
-                                  <span style={{ fontSize: '0.65rem', color: 'var(--danger-color)', marginTop: '2px', maxWidth: '160px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={errText}>
+                                  <span style={{ fontSize: '0.65rem', color: 'var(--danger-text)', marginTop: '2px', maxWidth: '160px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={errText}>
                                     {errText}
                                   </span>
                                 </div>

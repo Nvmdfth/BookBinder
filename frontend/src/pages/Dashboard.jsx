@@ -450,7 +450,7 @@ export default function Dashboard() {
 
             {rouletteError && (
               <div style={styles.rouletteState}>
-                <AlertTriangle size={30} style={{ color: 'var(--danger-color)' }} />
+                <AlertTriangle size={30} style={{ color: 'var(--danger-text)' }} />
                 <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>{rouletteError}</span>
                 <button type="button" className="btn btn-secondary" onClick={handleCloseRoulette}>
                   Close
@@ -538,7 +538,7 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--danger-color)',
     background: 'color-mix(in srgb, var(--danger-color) 8%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     fontSize: '0.85rem',
   },
   section: {

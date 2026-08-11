@@ -116,7 +116,7 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--danger-color)',
     background: 'color-mix(in srgb, var(--danger-color) 8%, transparent)',
-    color: 'var(--danger-color)',
+    color: 'var(--danger-text)',
     fontSize: '0.85rem',
     marginBottom: '18px',
   },
