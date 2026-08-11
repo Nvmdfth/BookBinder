@@ -1,0 +1,34 @@
+# Overrides layered on ../docker-compose.yml for the e2e stack.
+#
+# Applied under a separate project name (bookbinder-e2e) so nothing here can
+# touch the containers or data of a development stack running alongside it. The
+# base file pins its volume names globally, so they have to be renamed rather
+# than left to project prefixing, or both stacks would share one database.
+#
+# The published port is *not* overridden here: compose appends port lists rather
+# than replacing them, which would leave the base 5000 mapping in place and
+# collide with a running dev stack. Set PORT in the environment instead, which
+# the base file already interpolates. global-setup.js does this.
+
+services:
+  db:
+    container_name: bookbinder-e2e-db
+    volumes:
+      - pg_data_e2e:/var/lib/postgresql/data
+
+  app:
+    container_name: bookbinder-e2e-app
+    environment:
+      # Fixed credentials for the seeded admin, so specs have a known account
+      # without depending on open registration being switched on.
+      BOOKBINDER_ADMIN_EMAIL: e2e-admin@library.com
+      BOOKBINDER_ADMIN_PASS: e2e-password-123
+      JWT_SECRET: bookbinder_e2e_signing_key
+    volumes:
+      - uploads_data_e2e:/app/backend/uploads
+
+volumes:
+  pg_data_e2e:
+    name: bookbinder-e2e-pg-data
+  uploads_data_e2e:
+    name: bookbinder-e2e-uploads-data

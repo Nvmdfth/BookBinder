@@ -1,0 +1,16 @@
+{
+  "name": "bookbinder-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end regression suite driving the full BookBinder stack in a real browser",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "stack:down": "docker compose -p bookbinder-e2e -f ../docker-compose.yml -f docker-compose.e2e.yml down -v"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}
