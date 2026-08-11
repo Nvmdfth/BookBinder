@@ -83,6 +83,46 @@ describe('Light theme palettes meet WCAG AA for primary and secondary text', () 
   });
 });
 
+describe('Danger text is legible on every surface it labels', () => {
+  /*
+   * --danger-color is sized to carry white text on top of it, so it is dark by
+   * necessity. Reusing it as a label colour put "Sign Out" at 2.8:1 in the
+   * dark sidebar. --danger-text exists to be read rather than filled, and has
+   * to clear AA on both surfaces of every palette in both themes.
+   */
+  function readDeclaration(selector, token) {
+    const start = css.indexOf(selector);
+    if (start === -1) return null;
+    const body = css.slice(css.indexOf('{', start) + 1, css.indexOf('}', css.indexOf('{', start)));
+    const match = body.match(new RegExp(`--${token}:\\s*([^;]+);`));
+    return match ? match[1].trim() : null;
+  }
+
+  const darkDangerText = readDeclaration("[data-theme='dark']", 'danger-text');
+  const lightDangerText = readDeclaration(':root', 'danger-color');
+
+  it('declares a dark-theme override rather than inheriting the fill colour', () => {
+    expect(darkDangerText).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(darkDangerText.toLowerCase()).not.toBe(lightDangerText.toLowerCase());
+  });
+
+  it.each(PALETTES)('clears AA on both dark surfaces of the %s palette', (palette) => {
+    const tokens = readPaletteBlock(palette, 'dark');
+    const onPrimary = contrastRatio(darkDangerText, tokens['bg-primary']);
+    const onSecondary = contrastRatio(darkDangerText, tokens['bg-secondary']);
+
+    expect(Math.min(onPrimary, onSecondary)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it.each(PALETTES)('clears AA on both light surfaces of the %s palette', (palette) => {
+    const tokens = readPaletteBlock(palette, 'light');
+    const onPrimary = contrastRatio(lightDangerText, tokens['bg-primary']);
+    const onSecondary = contrastRatio(lightDangerText, tokens['bg-secondary']);
+
+    expect(Math.min(onPrimary, onSecondary)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});
+
 describe('Dark surface colours follow the PRD guidance', () => {
   it('uses the specified true off-black for the default palette', () => {
     const tokens = readPaletteBlock('indigo', 'dark');

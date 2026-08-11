@@ -116,7 +116,7 @@ export default function Layout({ children }) {
 
           <button
             className="nav-footer-btn"
-            style={{ color: 'var(--danger-color)' }}
+            style={{ color: 'var(--danger-text)' }}
             onClick={handleLogout}
             title="Sign out"
           >

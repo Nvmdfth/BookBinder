@@ -42,6 +42,13 @@
   --warning-color: #b57a1f;
   --danger-color: #b3382f;
 
+  /* Danger as *text on a surface*, which is a different problem from danger as
+     a fill. --danger-color is sized to carry white text on top of it, so it
+     stays dark; used as a label colour on a dark surface it reached only
+     2.8:1. These two cannot be the same value in both themes — see the dark
+     override below. Enforced by src/tests/themeContrast.test.js. */
+  --danger-text: var(--danger-color);
+
   /* Card stock depth: short, soft, low-opacity — paper does not float */
   --shadow-sm: 0 1px 2px rgba(40, 30, 20, 0.06);
   --shadow-md: 0 2px 4px rgba(40, 30, 20, 0.07), 0 6px 14px -6px rgba(40, 30, 20, 0.09);
@@ -90,6 +97,15 @@
   --surface: var(--bg-primary);
   --sunk: color-mix(in srgb, var(--surface) 94%, var(--text-primary));
   --soft: color-mix(in srgb, var(--surface) 84%, var(--text-primary));
+}
+
+/* Danger text has to lift off a dark ground rather than sink into it. One value
+   serves every dark palette: their surfaces span #1a201a to #211b14, all within
+   a hair of each other in luminance, and this clears AA against the lightest of
+   them. Same specificity as the :root above and declared after it, so it wins;
+   the palette blocks that follow do not touch this token. */
+[data-theme='dark'] {
+  --danger-text: #e2685e;
 }
 
 /* --------------------------------------------------------------------------
