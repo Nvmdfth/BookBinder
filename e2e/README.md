@@ -22,6 +22,7 @@ couple of minutes for the image build; after that it is ~35s.
 | `npm test` | Full run against a freshly built stack |
 | `npm run test:headed` | Same, with a visible browser |
 | `npm run test:ui` | Playwright's interactive runner |
+| `npm run tour` | Design tour — screenshots every screen and state |
 | `npm run report` | Open the HTML report from the last run |
 | `npm run stack:down` | Force-remove the stack if a run was interrupted |
 
@@ -81,6 +82,36 @@ not evidence of anything — the first draft of `password-change-session.spec.js
 had a cookie assertion that passed against the very bug it was written for,
 because the browser had silently kept the pre-change cookie and the assertion
 could not tell the two apart.
+
+## The design tour
+
+`npm run tour` boots the stack, seeds a realistic catalogue, and walks the app
+capturing every screen, overlay and interaction state to `tour/shots/`. It also
+runs a contrast audit over the rendered pages and prints anything below AA.
+
+It is a **reviewing tool, not a test**. It asserts almost nothing and cannot
+fail a build; it lives outside `tests/` so `playwright test` will not collect
+it. Its job is to make visual state inspectable in one command, because the
+problems it exists to surface — a field that reads as disabled, a red zero
+sitting beside a green all-clear — are invisible to assertions that only check
+behaviour.
+
+The contrast audit complements `frontend/src/tests/themeContrast.test.js`
+rather than duplicating it. That test checks the palette *tokens*, which is the
+right place for it. It cannot see a colour applied inline to a single element,
+which is exactly how "Sign Out" sat at 2.8:1 while every token in the
+stylesheet was compliant. The audit walks the rendered page instead.
+
+Two things worth knowing when reading its output:
+
+- **Seed enough content.** A design review of an app holding three books
+  reviews the wrong app. An early pass reported that the cover grid stranded
+  most of a 1440px screen; with a realistic ten-book shelf the row fills
+  normally. The fixture exists to avoid that class of false finding.
+- **Full-page screenshots lie about fixed elements.** A `fullPage` capture
+  places a `position: fixed` element at its viewport offset, which strands the
+  mobile bottom tray in the middle of the document and looks like a layout bug.
+  The phone pass captures viewport-sized shots for this reason.
 
 ## Known gap: the barcode scanner
 

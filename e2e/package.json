@@ -7,6 +7,7 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
+    "tour": "node tour/design-tour.js",
     "report": "playwright show-report",
     "stack:down": "docker compose -p bookbinder-e2e -f ../docker-compose.yml -f docker-compose.e2e.yml down -v"
   },
