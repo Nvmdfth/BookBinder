@@ -68,7 +68,7 @@ describe('BarcodeScanner camera teardown', () => {
   async function startCamera() {
     const user = userEvent.setup();
     const view = render(<BarcodeScanner onScanSuccess={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: /start ingestion scanner/i }));
+    await user.click(screen.getByRole('button', { name: /start barcode scanner/i }));
     await waitFor(() => expect(instances[0]?.isScanning).toBe(true));
     return view;
   }

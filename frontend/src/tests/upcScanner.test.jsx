@@ -86,7 +86,7 @@ describe('BarcodeScanner UPC handling', () => {
   async function startScanning(props = {}) {
     const user = userEvent.setup();
     render(<BarcodeScanner onScanSuccess={vi.fn()} {...props} />);
-    await user.click(screen.getByRole('button', { name: /start ingestion scanner/i }));
+    await user.click(screen.getByRole('button', { name: /start barcode scanner/i }));
     await waitFor(() => expect(decodeCallback).toBeTruthy());
     return user;
   }

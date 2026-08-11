@@ -337,12 +337,12 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
         className="card"
       >
         <Camera size={44} style={styles.icon} />
-        <h3 style={styles.title}>Camera Ingestion</h3>
+        <h3 style={styles.title}>Barcode Scanner</h3>
         <p style={styles.desc}>
           Position the book's linear barcode (ISBN-10 or ISBN-13) inside the target frame using your rear environment camera.
         </p>
         <button className="btn btn-primary" onClick={startScanner}>
-          Start Ingestion Scanner
+          Start Barcode Scanner
         </button>
         
         {errorMessage && (

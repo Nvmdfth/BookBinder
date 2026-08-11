@@ -707,7 +707,7 @@ export default function BookshelfDetails() {
             onClick={() => setActiveTab('scan')}
           >
             <Camera size={18} />
-            <span>Scan Ingestion</span>
+            <span>Barcode Scanner</span>
           </button>
           
           <button 
@@ -845,10 +845,10 @@ export default function BookshelfDetails() {
         </div>
       )}
 
-      {/* View Ingestion Scanner Tab */}
+      {/* View Barcode Scanner Tab */}
       {isCollaborator && activeTab === 'scan' && (
         <div style={styles.tabContent} className="card">
-          <h2 style={styles.tabTitle}>Barcode Bar Scanner</h2>
+          <h2 style={styles.tabTitle}>Barcode Scanner</h2>
           <BarcodeScanner
             onScanSuccess={handleScanSuccess}
             onConfirm={handleScanConfirm}
@@ -1191,7 +1191,7 @@ export default function BookshelfDetails() {
               {isCollaborator && (
                 <button className="btn btn-primary" onClick={() => setActiveTab('scan')}>
                   <Camera size={18} />
-                  <span>Start Scanning Ingests</span>
+                  <span>Start Barcode Scanner</span>
                 </button>
               )}
             </div>

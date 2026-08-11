@@ -91,7 +91,7 @@ describe('Filing a scan tray into a shelf', () => {
     await waitFor(() => expect(screen.getByText('Wishlist')).toBeInTheDocument());
 
     // Open the scanner and confirm a volume into the tray
-    await user.click(screen.getByRole('button', { name: /start scanning ingests/i }));
+    await user.click(screen.getByRole('button', { name: /start barcode scanner/i }));
     await waitFor(() => expect(scannerProps.current?.onConfirm).toBeTypeOf('function'));
     scannerProps.current.onConfirm(SCANNED);
 
