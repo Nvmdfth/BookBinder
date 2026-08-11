@@ -279,7 +279,16 @@ export default function Dashboard() {
             <div className="stat-label">Shelves</div>
           </div>
           <div>
-            <div className="stat-value" style={{ color: 'var(--success-color)' }}>
+            {/*
+              Colour tracks the value, not the metric. Nothing has been read
+              yet at 0%, so painting it green reports an achievement that has
+              not happened; it falls back to the neutral stat colour until
+              there is progress to celebrate.
+            */}
+            <div
+              className="stat-value"
+              style={accession.readPct > 0 ? { color: 'var(--success-color)' } : undefined}
+            >
               {accession.readPct}%
             </div>
             <div className="stat-label">Read</div>

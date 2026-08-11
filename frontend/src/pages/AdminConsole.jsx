@@ -370,7 +370,19 @@ export default function AdminConsole() {
 
           <div style={styles.cleaningConsole}>
             <div style={styles.orphanCountRow}>
-              <span style={styles.orphanCountVal}>{orphanData.count}</span>
+              {/*
+                Zero orphans is the healthy state, and the panel directly below
+                says so in green. Painting the count red regardless put an
+                alarm and an all-clear side by side reporting the same fact.
+              */}
+              <span
+                style={{
+                  ...styles.orphanCountVal,
+                  color: orphanData.count > 0 ? 'var(--danger-color)' : 'var(--text-muted)',
+                }}
+              >
+                {orphanData.count}
+              </span>
               <div>
                 <h4 style={styles.orphanCountTitle}>Orphaned Catalog Entries</h4>
                 <p style={styles.orphanCountDesc}>Cached records not physically mapped inside any user bookshelves.</p>
@@ -815,7 +827,7 @@ const styles = {
   orphanCountVal: {
     fontSize: '2.5rem',
     fontWeight: '800',
-    color: 'var(--danger-color)',
+    // Colour is applied at the call site — it depends on the count.
     lineHeight: '1',
   },
   orphanCountTitle: {
