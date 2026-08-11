@@ -46,6 +46,39 @@ async function findCatalogBook(barcode) {
 }
 
 /**
+ * Every shelf visible to this user that already carries the given book.
+ *
+ * "Visible" spans owned shelves and shelves shared with them under either
+ * permission: a copy sitting on a shelf someone shared with you is still a copy
+ * you can reach, and a scanner that stayed quiet about it would send you out to
+ * buy a second one. The role each holding carries lets the client offer a
+ * filing action only where the write would actually be allowed.
+ *
+ * The CASE/LEFT JOIN pair resolves the role exactly as the UNION ALL in
+ * bookshelfRouter does, so the two cannot drift on what 'owner' means. The
+ * UNIQUE (bookshelf_id, shared_with_user_id) constraint caps the join at one
+ * row per shelf, so owning a shelf that is also shared with you — which the
+ * schema permits — cannot report the book twice.
+ */
+async function findHoldings(bookId, userId) {
+  const res = await query(
+    `SELECT ub.id AS mapping_id, bs.id AS bookshelf_id, bs.name AS bookshelf_name,
+            bs.is_wishlist, ub.physical_location, ub.is_read,
+            CASE WHEN bs.user_id = $2 THEN 'owner' ELSE ss.permission END AS role
+       FROM user_books ub
+       JOIN bookshelves bs ON ub.bookshelf_id = bs.id
+       LEFT JOIN shelf_shares ss
+         ON ss.bookshelf_id = bs.id AND ss.shared_with_user_id = $2
+      WHERE ub.book_id = $1
+        AND (bs.user_id = $2 OR ss.shared_with_user_id IS NOT NULL)
+      ORDER BY bs.name ASC`,
+    [bookId, userId]
+  );
+
+  return res.rows;
+}
+
+/**
  * Record the UPC a book was scanned under, so the next scan skips the manual form.
  *
  * Re-entering a barcode reassigns it: the correction the user just typed is more
@@ -552,6 +585,77 @@ router.post('/manual', async (req, res) => {
 });
 
 /**
+ * POST /api/books/file - Map an already-resolved catalog book onto a bookshelf
+ *
+ * The scan pipeline takes a barcode because it is resolving one. A caller holding
+ * a confirmed catalog row is past that: re-entering through /scan/:isbn would
+ * repeat findCatalogBook for a book it already has, and would fail outright for a
+ * manually created one, whose synthetic MANUAL-<timestamp> ISBN cannot pass the
+ * isValidBarcode guard that route opens with. Filing by book id is the operation
+ * actually being performed.
+ */
+router.post('/file', async (req, res) => {
+  const { bookshelfId, physicalLocation, notes } = req.body;
+  const bookId = parseInt(req.body.bookId, 10);
+
+  if (isNaN(bookId)) {
+    return res.status(400).json({ error: 'A valid book ID is required.' });
+  }
+
+  req.params.bookshelfId = bookshelfId;
+  verifyBookshelfAccess(req, res, async () => {
+    requireCollaborator(req, res, async () => {
+      try {
+        const activeBookshelfId = req.shelfAccess.bookshelfId;
+
+        // The id arrives from the client, so it is a claim about the catalog, not
+        // a fact. An unchecked insert would trip the foreign key as a 500.
+        const bookRes = await query('SELECT * FROM books WHERE id = $1', [bookId]);
+        if (bookRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Book not found in the catalog.' });
+        }
+        const book = bookRes.rows[0];
+
+        const mapCheck = await query(
+          'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
+          [activeBookshelfId, bookId]
+        );
+
+        if (mapCheck.rows.length > 0) {
+          return res.status(409).json({
+            error: `"${book.title}" is already mapped inside this bookshelf.`,
+            book: book,
+          });
+        }
+
+        const newMap = await query(
+          `INSERT INTO user_books (user_id, bookshelf_id, book_id, physical_location, notes)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, physical_location, notes, created_at`,
+          [
+            req.user.id,
+            activeBookshelfId,
+            bookId,
+            physicalLocation ? physicalLocation.trim() : null,
+            notes ? notes.trim() : null,
+          ]
+        );
+
+        return res.status(201).json({
+          message: 'Book added to bookshelf successfully.',
+          mapping: newMap.rows[0],
+          book: book,
+        });
+
+      } catch (error) {
+        console.error('File Book Router Error:', error);
+        return res.status(500).json({ error: 'Internal server error filing book.' });
+      }
+    });
+  });
+});
+
+/**
  * PUT /api/books/mapping/:mappingId - Update physical location & custom notes (Collaborator/Owner)
  */
 router.put('/mapping/:mappingId', async (req, res) => {
@@ -783,7 +887,12 @@ router.get('/lookup/:isbn', async (req, res) => {
       return res.status(404).json(manualFallback(isbn, 'Book details not found.'));
     }
 
-    return res.json(book);
+    // Scanning away from a shelf, "do I already own this?" is the question being
+    // asked, so the answer travels with the metadata rather than costing a second
+    // round trip. A book held nowhere reports an empty array, never a 404.
+    const holdings = await findHoldings(book.id, req.user.id);
+
+    return res.json({ ...book, holdings });
 
   } catch (error) {
     console.error('ISBN Lookup Router Error:', error);

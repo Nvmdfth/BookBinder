@@ -20,7 +20,23 @@ const BOX_H = 0.35;
 const MASK_X = `${((1 - BOX_W) / 2) * 100}%`;
 const MASK_Y = `${((1 - BOX_H) / 2) * 100}%`;
 
-export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, onManualFallback }) {
+export default function BarcodeScanner({
+  onScanSuccess,
+  onConfirm,
+  onScanError,
+  onManualFallback,
+  /**
+   * Hold the camera still while a parent's own panel is up.
+   *
+   * This component resumes itself after every confirmation (handleConfirmYes →
+   * handleConfirmDismiss), which is right for the shelf-bound loop where the
+   * next scan follows immediately. A caller that puts a step of its own on
+   * screen — asking which shelf a volume belongs on, say — needs the decoder to
+   * stop rather than keep firing behind an overlay it knows nothing about.
+   * Defaults to false, so the shelf flow behaves exactly as before.
+   */
+  paused = false,
+}) {
   const [isActive, setIsActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -319,6 +335,31 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
       };
     }
   }, [isActive]);
+
+  /*
+   * Apply the parent's brake. This runs after handleConfirmDismiss has already
+   * resumed the decoder — React commits the new `paused` a render later — so
+   * the camera is briefly live between the two. Nothing can be confirmed in
+   * that window without a further tap, and the parent drops any confirmation
+   * that arrives while its own panel is up, so the gap is harmless.
+   */
+  useEffect(() => {
+    const instance = qrCodeRef.current;
+    if (!isActive || !instance) return;
+
+    isScannerPausedRef.current = paused;
+
+    try {
+      if (paused) {
+        if (instance.isScanning) instance.pause(true);
+      } else {
+        instance.resume();
+      }
+    } catch (err) {
+      // Both calls throw synchronously when already in the requested state
+      console.warn('Scanner pause toggle:', err);
+    }
+  }, [paused, isActive]);
 
   // Auto clean up camera stream on unmount
   useEffect(() => {

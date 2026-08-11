@@ -103,3 +103,11 @@ CREATE TABLE IF NOT EXISTS book_barcodes (
 
 CREATE INDEX IF NOT EXISTS idx_book_barcodes_book_id ON book_barcodes(book_id);
 
+-- 11. Holdings lookup: "which of my shelves already carry this book?"
+--
+-- Asked on every scan, against the table that grows fastest in the app. Postgres
+-- builds indexes for PRIMARY KEY and UNIQUE constraints only, and user_books
+-- declares neither on book_id — so without this the question costs a sequential
+-- scan of every mapping every user has ever filed.
+CREATE INDEX IF NOT EXISTS idx_user_books_book_id ON user_books(book_id);
+

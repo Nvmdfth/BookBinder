@@ -72,10 +72,11 @@ broken by a navigation.
 The scanned barcode is carried on the row and sent as `scannedBarcode` at filing time,
 so `learnBarcodeAlias` records it and the next scan of that cover resolves locally.
 
-Known wrinkle, accepted for v1: an unresolvable *ISBN* tears the camera down before
-handing off (`BarcodeScanner.jsx:141` calls `stopScanner()` first), whereas an
-unresolvable *UPC* leaves it live. So the ISBN case costs one extra tap to restart the
-camera after submitting the form. Not worth widening the scanner's contract for.
+Both routes into this state tear the camera down before handing off — the ISBN branch
+calls `stopScanner()` inline, and the UPC branch does so in `handleEnterManually`
+after its "Enter Manually" button. So the form always arrives with the camera stopped,
+and resuming the run costs one tap on **Start Barcode Scanner**. Consistent, and not
+worth widening the scanner's contract to avoid.
 
 ### Tray and filing
 

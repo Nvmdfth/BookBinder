@@ -689,7 +689,8 @@ select.form-input {
 }
 
 .app-mobile-header,
-.app-bottom-tray {
+.app-bottom-tray,
+.app-scan-fab {
   display: none;
 }
 
@@ -737,6 +738,33 @@ select.form-input {
     border-top: 1px solid var(--rule);
     box-shadow: 0 -2px 10px rgba(40, 30, 20, 0.07);
   }
+
+  /* Scanning is the app's main verb, so it gets a target of its own above the
+     tray rather than a quarter of the tray's width. Clears the tray's 62px plus
+     whatever the device reserves for its home indicator, and sits under the
+     modal overlay's z-index 200 so an open dialog covers it. */
+  .app-scan-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 17px;
+    bottom: calc(62px + env(safe-area-inset-bottom) + 16px);
+    z-index: 95;
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: var(--accent-color);
+    color: var(--bg-secondary);
+    box-shadow: var(--shadow-lg);
+    transition: var(--transition-smooth);
+  }
+
+  .app-scan-fab:active {
+    transform: scale(0.94);
+  }
 }
 
 /* Sidebar / tray navigation items */
@@ -754,6 +782,17 @@ select.form-input {
   position: relative;
   white-space: nowrap;
   overflow: hidden;
+}
+
+/* A nav item that acts rather than navigates. The <a> rules above assume the
+   browser's anchor defaults, which a <button> does not share. */
+.nav-link-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
 }
 
 /* Collapsed rail: icons only, still 44px of target */

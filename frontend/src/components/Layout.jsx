@@ -3,9 +3,10 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthProvider';
 import { useTheme } from '../context/ThemeProvider';
 import { readSetting, writeSetting } from '../utils/storage';
+import ScanModal from './ScanModal';
 import {
   BookMarked, User, ShieldAlert, Sun, Moon, LogOut,
-  PanelLeftClose, PanelLeftOpen, UserCheck, ArrowLeft,
+  PanelLeftClose, PanelLeftOpen, UserCheck, ArrowLeft, ScanLine,
 } from 'lucide-react';
 
 const RAIL_KEY = 'bookbinder_nav_collapsed';
@@ -19,6 +20,10 @@ export default function Layout({ children }) {
   // The rail state outlives the session: someone working at 500 volumes wants
   // the cover space back permanently, not once per page load.
   const [collapsed, setCollapsed] = useState(() => readSetting(RAIL_KEY) === 'true');
+
+  // Scanning is shelf-independent from here: the modal asks where a volume goes
+  // rather than assuming the page you happen to be on.
+  const [scanOpen, setScanOpen] = useState(false);
 
   const toggleRail = () => {
     setCollapsed((prev) => {
@@ -96,6 +101,18 @@ export default function Layout({ children }) {
               <span className="nav-label">{item.name}</span>
             </Link>
           ))}
+
+          {/* A button, not a link: this opens the camera over wherever you are
+              rather than navigating away from it. */}
+          <button
+            type="button"
+            className="nav-link nav-link-btn"
+            title="Scan"
+            onClick={() => setScanOpen(true)}
+          >
+            <ScanLine size={21} />
+            <span className="nav-label">Scan</span>
+          </button>
         </nav>
 
         <div className="nav-footer">
@@ -185,6 +202,17 @@ export default function Layout({ children }) {
         <div className="app-content">{children}</div>
       </main>
 
+      {/* Thumb-reachable scan trigger, riding above the tray rather than inside
+          it — the tray keeps its navigation destinations (Req 4.1.1). */}
+      <button
+        type="button"
+        className="app-scan-fab"
+        onClick={() => setScanOpen(true)}
+        aria-label="Scan a book"
+      >
+        <ScanLine size={24} />
+      </button>
+
       {/* Sticky thumb-reachable tray (Req 4.1.1) */}
       <nav className="app-bottom-tray">
         {menuItems.map((item) => (
@@ -198,6 +226,8 @@ export default function Layout({ children }) {
           </Link>
         ))}
       </nav>
+
+      {scanOpen && <ScanModal onClose={() => setScanOpen(false)} />}
     </div>
   );
 }

@@ -49,8 +49,9 @@ function authCookie(userKey, overrides = {}) {
  * matching the statement wins. Unmatched statements throw, so a test can never
  * silently pass against SQL it did not intend to run.
  *
- * A default handler for the authMiddleware user lookup is appended last, so a
- * test may supply its own to exercise the disabled/revoked session paths.
+ * Default handlers for the authMiddleware user lookup and the holdings probe are
+ * appended last, so a test may supply its own to exercise the disabled/revoked
+ * session paths or to assert on holdings.
  */
 function mockSql(handlers, { authenticatedAs = 'owner', authOverrides = {} } = {}) {
   const authUser = { ...USERS[authenticatedAs], ...authOverrides };
@@ -67,6 +68,12 @@ function mockSql(handlers, { authenticatedAs = 'owner', authOverrides = {} } = {
         is_disabled: authUser.is_disabled ?? false,
       }],
     ],
+    /*
+     * Every successful metadata lookup asks which of the user's shelves already
+     * carry the book. That is incidental to most tests here, so it defaults to
+     * "held nowhere" rather than forcing each one to restate it.
+     */
+    [/FROM user_books ub JOIN bookshelves bs/, []],
   ];
 
   query.mockImplementation(async (text, params) => {
