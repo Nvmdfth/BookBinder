@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 
 /**
@@ -29,7 +29,7 @@ export default function Modal({
 }) {
   const panelRef = useRef(null);
   const bodyRef = useRef(null);
-  const headingId = useRef(`modal-h-${Math.random().toString(36).slice(2, 9)}`).current;
+  const headingId = useId();
 
   /*
    * The setup effect below runs exactly once, so it cannot close over onClose

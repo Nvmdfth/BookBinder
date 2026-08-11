@@ -4,7 +4,8 @@ import {
   FolderPlus, Compass, Users, BookOpen, Sparkles, RefreshCw,
   AlertTriangle, MapPin,
 } from 'lucide-react';
-import BookVolume, { CLOTHS } from '../components/BookVolume';
+import BookVolume from '../components/BookVolume';
+import { CLOTHS } from '../utils/binding';
 import Modal from '../components/Modal';
 
 /**

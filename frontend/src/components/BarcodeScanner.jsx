@@ -24,7 +24,7 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
   const [isActive, setIsActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isVibratingSupport, setIsVibratingSupport] = useState(true);
+  const [isVibratingSupport] = useState(() => !!navigator.vibrate);
   const [isPulse, setIsPulse] = useState(false);
   
   // v1.4 Scanner Lookup Confirmation states
@@ -64,10 +64,12 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
     }
   };
 
-  useEffect(() => {
-    // Check vibration support
-    setIsVibratingSupport(!!navigator.vibrate);
-  }, []);
+  const stopScanner = async () => {
+    isScannerPausedRef.current = false;
+    await teardownCamera(qrCodeRef.current);
+    qrCodeRef.current = null;
+    setIsActive(false);
+  };
 
   // Web Audio API synthesizes a success beep directly (no static audio files required)
   const synthesizeSuccessBeep = () => {
@@ -209,6 +211,18 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
     setIsActive(true);
   };
 
+  /*
+   * The main scanner effect below only re-runs on isActive, not on every
+   * render — restarting the camera whenever a parent re-render hands down a
+   * new onScanError identity would tear down and reinitialize html5-qrcode
+   * mid-scan. This ref lets its callbacks read the latest closures without
+   * being listed as effect dependencies.
+   */
+  const latestCallbacks = useRef({ handleScanLookup, onScanError, triggerSuccessSignals });
+  useEffect(() => {
+    latestCallbacks.current = { handleScanLookup, onScanError, triggerSuccessSignals };
+  });
+
   useEffect(() => {
     let html5Qrcode = null;
 
@@ -256,12 +270,12 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
            * wait until the lookup resolves, or the signal would tell the user
            * "got it" for something that was never a book (Req 4.1.3).
            */
-          if (isValidISBN(candidate)) triggerSuccessSignals();
-          handleScanLookup(candidate);
+          if (isValidISBN(candidate)) latestCallbacks.current.triggerSuccessSignals();
+          latestCallbacks.current.handleScanLookup(candidate);
         };
 
         const onDecodeFailure = (error) => {
-          if (onScanError) onScanError(error);
+          latestCallbacks.current.onScanError?.(error);
         };
 
         try {
@@ -305,13 +319,6 @@ export default function BarcodeScanner({ onScanSuccess, onConfirm, onScanError, 
       };
     }
   }, [isActive]);
-
-  const stopScanner = async () => {
-    isScannerPausedRef.current = false;
-    await teardownCamera(qrCodeRef.current);
-    qrCodeRef.current = null;
-    setIsActive(false);
-  };
 
   // Auto clean up camera stream on unmount
   useEffect(() => {

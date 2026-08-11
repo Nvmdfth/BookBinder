@@ -32,7 +32,7 @@ export default function ProfileSettings() {
   const [newShelfName, setNewShelfName] = useState('');
   const [newShelfDesc, setNewShelfDesc] = useState('');
   
-  const [importFile, setImportFile] = useState(null);
+  const [, setImportFile] = useState(null);
   const [parsedRows, setParsedRows] = useState([]);
   const [headers, setHeaders] = useState([]);
   const [fieldMappings, setFieldMappings] = useState({

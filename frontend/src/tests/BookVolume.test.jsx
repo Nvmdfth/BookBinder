@@ -6,7 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import BookVolume, { clothFor, CLOTHS } from '../components/BookVolume';
+import BookVolume from '../components/BookVolume';
+import { clothFor, CLOTHS } from '../utils/binding';
 
 describe('BookVolume', () => {
   it('typesets the title onto a binding when no cover art is on file', () => {

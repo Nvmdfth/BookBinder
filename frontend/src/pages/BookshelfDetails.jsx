@@ -237,12 +237,18 @@ export default function BookshelfDetails() {
     setScanTray([]);
     setViewingBook(null);
     setScanMessage(null);
+    // fetchShelfDetails/fetchWriteableShelves are recreated every render; this
+    // should only re-run when the route param changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
     if (shelf?.isOwner) {
       fetchShareList();
     }
+    // fetchShareList is recreated every render; this should only re-run when
+    // the shelf itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shelf]);
 
   /** Clear the manual form and open it, seeded with whatever the scan produced. */
@@ -363,7 +369,6 @@ export default function BookshelfDetails() {
     try {
       const filed = [];
       for (const book of scanTray) {
-        // eslint-disable-next-line no-await-in-loop
         const outcome = await handleScanSuccess(book.isbn);
         if (outcome !== 'filed') {
           // A lookup that fell back to the manual form, or an outright failure,
@@ -608,9 +613,6 @@ export default function BookshelfDetails() {
     writeSetting(VIEW_MODE_KEY, mode);
   };
 
-  const criteriaActive =
-    bookSearchQuery.trim() !== '' || readFilter !== 'all' || locationFilter !== '';
-
   const clearCriteria = () => {
     setBookSearchQuery('');
     setReadFilter('all');
@@ -637,7 +639,6 @@ export default function BookshelfDetails() {
     );
   }
 
-  const isViewOnly = shelf.accessRole === 'view'; // Access rule parameter checking (Req 4.3.2)
   const isCollaborator = shelf.accessRole === 'owner' || shelf.accessRole === 'collaborator';
 
   return (
