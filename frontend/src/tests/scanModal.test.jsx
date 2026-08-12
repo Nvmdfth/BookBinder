@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -19,6 +19,12 @@ vi.mock('../components/BarcodeScanner', () => ({
     scannerProps.current = props;
     return <div data-testid="scanner" />;
   },
+}));
+
+/** The tray-persistence key is keyed on the logged-in user; a fixed id is enough here. */
+vi.mock('../context/AuthProvider', () => ({
+  AuthProvider: ({ children }) => children,
+  useAuth: () => ({ user: { id: 7, email: 'reader@library.com', role: 'user' } }),
 }));
 
 import ScanModal from '../components/ScanModal';
@@ -54,6 +60,24 @@ const HELD_DUNE = {
   ],
 };
 
+/**
+ * A fresh in-memory localStorage, swapped in via the same getter-spy jsdom
+ * itself uses internally — see storage.test.js's denyStorage() for the same
+ * technique in the other direction. Keeps each test's persisted tray from
+ * bleeding into the next.
+ */
+function installFakeStorage() {
+  const store = new Map();
+  const fake = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: (key) => store.delete(key),
+    clear: () => store.clear(),
+  };
+  vi.spyOn(window, 'localStorage', 'get').mockReturnValue(fake);
+  return fake;
+}
+
 /** Route fetch by URL so a test states only what it cares about. */
 function mockApi({ shelves = SHELVES, file, manual } = {}) {
   return vi.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
@@ -86,10 +110,12 @@ const readyModal = async () => {
 
 describe('ScanModal', () => {
   let fetchSpy;
+  let storage;
 
   beforeEach(() => {
     scannerProps.current = null;
     fetchSpy = mockApi();
+    storage = installFakeStorage();
   });
 
   afterEach(() => {
@@ -378,6 +404,84 @@ describe('ScanModal', () => {
 
       expect(
         await screen.findByText('Internal server error fetching bookshelves.')
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('surviving a closed modal', () => {
+    const addDuneToShelf = async (user, shelfValue = '1') => {
+      scannerProps.current.onConfirm(DUNE);
+      await screen.findByText('Where does it go?');
+      await user.selectOptions(screen.getByRole('combobox'), shelfValue);
+      await user.click(screen.getByRole('button', { name: 'Add to tray' }));
+      await screen.findByText(/Frank Herbert →/);
+    };
+
+    /** Layout unmounts ScanModal on close; a real reopen is a fresh mount. */
+    const reopenModal = async () => {
+      cleanup();
+      scannerProps.current = null;
+      await readyModal();
+    };
+
+    it('restores an unfiled tray on reopen, with a banner explaining why', async () => {
+      const user = userEvent.setup();
+      await readyModal();
+      await addDuneToShelf(user);
+
+      await reopenModal();
+
+      expect(
+        await screen.findByText('Restored 1 unfiled volume from your last session.')
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Frank Herbert → Sci-Fi/)).toBeInTheDocument();
+    });
+
+    it('keys the persisted tray to the logged-in user', async () => {
+      const user = userEvent.setup();
+      await readyModal();
+      await addDuneToShelf(user);
+
+      const saved = JSON.parse(storage.getItem('bookbinder_scan_tray_7'));
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ bookId: 42, shelfId: 1 });
+    });
+
+    it('clears the persisted tray once every row is filed, so nothing is restored later', async () => {
+      const user = userEvent.setup();
+      await readyModal();
+      await addDuneToShelf(user);
+
+      await user.click(screen.getByRole('button', { name: /File 1 volume/ }));
+      await screen.findByText('Filed 1 volume.');
+
+      expect(storage.getItem('bookbinder_scan_tray_7')).toBeNull();
+
+      await reopenModal();
+
+      expect(screen.queryByText(/Restored/)).not.toBeInTheDocument();
+    });
+
+    it('keeps a still-failing row persisted rather than discarding it silently', async () => {
+      const user = userEvent.setup();
+      fetchSpy.mockRestore();
+      fetchSpy = mockApi({
+        file: () => ({
+          ok: false,
+          status: 409,
+          json: async () => ({ error: '"Dune" is already mapped inside this bookshelf.' }),
+        }),
+      });
+
+      await readyModal();
+      await addDuneToShelf(user);
+      await user.click(screen.getByRole('button', { name: /File 1 volume/ }));
+      await screen.findByText(/already mapped inside this bookshelf/);
+
+      await reopenModal();
+
+      expect(
+        await screen.findByText('Restored 1 unfiled volume from your last session.')
       ).toBeInTheDocument();
     });
   });

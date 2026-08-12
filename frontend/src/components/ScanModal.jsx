@@ -4,6 +4,8 @@ import { AlertCircle, BookMarked, Check, Library, RefreshCw, Star, Trash2 } from
 import Modal from './Modal';
 import BarcodeScanner from './BarcodeScanner';
 import BookVolume from './BookVolume';
+import { useAuth } from '../context/AuthProvider';
+import { readJSON, writeJSON, removeSetting } from '../utils/storage';
 
 /**
  * Scanning without a shelf in mind.
@@ -35,6 +37,15 @@ function describeHolding(holding) {
 }
 
 export default function ScanModal({ onClose }) {
+  const { user } = useAuth();
+
+  /**
+   * Keyed per user, not just globally: an admin impersonating another account
+   * must not see (or silently inherit) a tray scanned under a different login
+   * on the same browser.
+   */
+  const trayStorageKey = user ? `bookbinder_scan_tray_${user.id}` : null;
+
   const [shelves, setShelves] = useState([]);
   const [shelvesError, setShelvesError] = useState(null);
   const [loadingShelves, setLoadingShelves] = useState(true);
@@ -44,7 +55,11 @@ export default function ScanModal({ onClose }) {
   const [pending, setPending] = useState(null);
   const [pendingBarcode, setPendingBarcode] = useState('');
 
-  const [tray, setTray] = useState([]);
+  const [tray, setTray] = useState(() =>
+    trayStorageKey ? readJSON(trayStorageKey, []) : []
+  );
+  /** Set once at mount if the tray above came from a prior, unfiled session. */
+  const [restoredCount] = useState(() => (trayStorageKey ? readJSON(trayStorageKey, []).length : 0));
   const [filing, setFiling] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -72,6 +87,22 @@ export default function ScanModal({ onClose }) {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * A run of scans is easy to lose to a stray tap on the backdrop or an
+   * accidental refresh, and re-scanning thirty spines is not a cost worth
+   * risking. Nothing is written until it is filed anyway, so mirroring the
+   * tray to localStorage as it changes costs nothing and lets a closed
+   * modal be reopened exactly where it left off.
+   */
+  useEffect(() => {
+    if (!trayStorageKey) return;
+    if (tray.length === 0) {
+      removeSetting(trayStorageKey);
+    } else {
+      writeJSON(trayStorageKey, tray);
+    }
+  }, [tray, trayStorageKey]);
 
   const writeableShelves = shelves.filter(isWriteable);
 
@@ -284,6 +315,15 @@ export default function ScanModal({ onClose }) {
         <div style={{ ...styles.banner, ...styles.bannerError }} role="alert">
           <AlertCircle size={17} />
           <span>You need a bookshelf you can write to before you can file a scan.</span>
+        </div>
+      )}
+
+      {restoredCount > 0 && tray.length > 0 && (
+        <div style={{ ...styles.banner, ...styles.bannerInfo }} role="status">
+          <RefreshCw size={17} />
+          <span>
+            Restored {restoredCount} unfiled {restoredCount === 1 ? 'volume' : 'volumes'} from your last session.
+          </span>
         </div>
       )}
 
@@ -637,6 +677,10 @@ const styles = {
   },
   bannerSuccess: {
     background: 'color-mix(in srgb, var(--success-color) 13%, transparent)',
+    color: 'var(--text-primary)',
+  },
+  bannerInfo: {
+    background: 'color-mix(in srgb, var(--accent-color) 11%, transparent)',
     color: 'var(--text-primary)',
   },
   tray: {
