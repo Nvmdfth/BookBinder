@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, BookMarked, Check, Library, RefreshCw, Star, Trash2 } from 'lucide-react';
 import Modal from './Modal';
@@ -78,7 +78,6 @@ export default function ScanModal({ onClose }) {
   const backToScanning = () => {
     setPending(null);
     setPendingBarcode('');
-    setChosenShelfId('');
     setManualTitle('');
     setManualAuthor('');
     setStep('scanning');
@@ -96,7 +95,6 @@ export default function ScanModal({ onClose }) {
     if (step !== 'scanning') return;
     setMessage(null);
     setPending(book);
-    setChosenShelfId('');
     setStep(book.holdings && book.holdings.length > 0 ? 'holdings' : 'picker');
   };
 
@@ -112,15 +110,30 @@ export default function ScanModal({ onClose }) {
     setPendingBarcode(barcode || '');
     setManualTitle('');
     setManualAuthor('');
-    setChosenShelfId('');
     setStep('manual');
   };
 
   /** Shelves this pending book already sits on — offering them would only 409. */
-  const blockedShelfIds = new Set([
-    ...(pending?.holdings || []).map((h) => h.bookshelf_id),
-    ...tray.filter((t) => pending && t.bookId === pending.id).map((t) => t.shelfId),
-  ]);
+  const blockedShelfIds = useMemo(
+    () =>
+      new Set([
+        ...(pending?.holdings || []).map((h) => h.bookshelf_id),
+        ...tray.filter((t) => pending && t.bookId === pending.id).map((t) => t.shelfId),
+      ]),
+    [pending, tray]
+  );
+
+  /**
+   * The shelf picker stays on whatever the user last chose, so filing several
+   * volumes onto the same shelf only takes one selection. It only needs to
+   * clear itself when that carries the selection onto a now-blocked shelf,
+   * e.g. the next book scanned is already shelved there.
+   */
+  useEffect(() => {
+    if (chosenShelfId && blockedShelfIds.has(Number(chosenShelfId))) {
+      setChosenShelfId('');
+    }
+  }, [blockedShelfIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addCatalogToTray = () => {
     const shelf = writeableShelves.find((s) => String(s.id) === String(chosenShelfId));
