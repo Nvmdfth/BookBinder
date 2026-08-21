@@ -247,23 +247,37 @@ to exhaust container memory.
 
 ## Testing
 
-**Backend** (supertest, against a real test database):
+The existing suite mocks the database layer wholesale (`tests/helpers/testApp.js`) and
+runs no Postgres. These tests follow that convention rather than introducing a
+containerized database: `child_process.spawn` is mocked the same way `db` is, so the
+assertions are about **which command is constructed and how its exit code is handled**
+— which is where this subsystem's bugs live.
 
-- Unauthenticated request → `401`; valid token owned by a non-admin → `403`; revoked
-  token → `401`; disabled owner → `401`.
+**Backend** (jest + supertest, `db` and `child_process` both mocked):
+
+- Unauthenticated request → `401`; token owned by a non-admin → `403`; revoked token →
+  `401`; disabled owner → `401`.
 - Cookie-authenticated admin still reaches the endpoints — the Bearer branch must not
   regress the browser path.
 - `POST /restore` without `confirm`, and with a wrong `confirm` value → `400`, and
-  `pg_restore` is never spawned.
-- Round trip: export, mutate a row, restore, assert the original value is back.
-- A corrupt archive → `500`, and the pre-existing data is unchanged (proving
-  `--single-transaction` rolls back).
+  `spawn` is never called.
+- `pg_dump` is spawned with an argument array and no shell, and `PGPASSWORD` is present
+  in the child env but absent from the argument list.
+- A non-zero exit → `500` carrying stderr, and **no** `Content-Disposition` header —
+  the regression guard for the truncated-backup failure this design exists to prevent.
+- `pg_restore` receives `--clean --if-exists --single-transaction` and the uploaded
+  bytes on stdin.
 - Minting returns plaintext once; listing never includes a token value or hash.
 
-**Frontend** (vitest):
+**Frontend** (vitest + testing-library):
 
 - Restore button stays disabled until the confirmation input matches exactly.
 - A freshly minted token renders once and is absent from a subsequent list render.
+
+**Manual verification** (documented in the plan, run once against real containers):
+export from a live stack, confirm `pg_restore --list` reads the archive, restore it
+back, and confirm the data survives. Automated round-trip coverage would require
+standing up Postgres in CI, which this repo does not do for any other subsystem.
 
 ## n8n usage
 
