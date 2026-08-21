@@ -131,6 +131,60 @@ describe('dumpDatabase', () => {
 
     await expect(promise).rejects.toThrow(/ENOENT|not available/i);
   });
+
+  it('rejects rather than crashing the process on a stdout stream error', async () => {
+    const child = fakeChild();
+    spawn.mockReturnValue(child);
+
+    const promise = dumpDatabase();
+    // Simulates EPIPE after child.kill() tears down the pipe mid-write.
+    child.stdout.emit('error', Object.assign(new Error('read EPIPE'), { code: 'EPIPE' }));
+
+    await expect(promise).rejects.toThrow(/EPIPE/);
+  });
+
+  it('rejects rather than crashing the process on a stderr stream error', async () => {
+    const child = fakeChild();
+    spawn.mockReturnValue(child);
+
+    const promise = dumpDatabase();
+    child.stderr.emit('error', Object.assign(new Error('read EPIPE'), { code: 'EPIPE' }));
+
+    await expect(promise).rejects.toThrow(/EPIPE/);
+  });
+
+  it('honours the PG* fallbacks db.js also reads, so both modules resolve the same connection', async () => {
+    delete process.env.DB_HOST;
+    delete process.env.DB_PORT;
+    delete process.env.DB_USER;
+    delete process.env.DB_NAME;
+    delete process.env.DB_PASSWORD;
+    process.env.PGHOST = 'pg-host';
+    process.env.PGPORT = '6543';
+    process.env.PGUSER = 'pg-user';
+    process.env.PGDATABASE = 'pg-database';
+    process.env.PGPASSWORD = 'pg-secret';
+
+    const child = fakeChild();
+    spawn.mockReturnValue(child);
+
+    const promise = dumpDatabase();
+    child.stdout.end();
+    child.emit('close', 0);
+    await promise;
+
+    const [, args, options] = spawn.mock.calls[0];
+    expect(args).toEqual(
+      expect.arrayContaining(['-h', 'pg-host', '-p', '6543', '-U', 'pg-user', '-d', 'pg-database'])
+    );
+    expect(options.env.PGPASSWORD).toBe('pg-secret');
+
+    delete process.env.PGHOST;
+    delete process.env.PGPORT;
+    delete process.env.PGUSER;
+    delete process.env.PGDATABASE;
+    delete process.env.PGPASSWORD;
+  });
 });
 
 describe('restoreDatabase', () => {
@@ -171,5 +225,41 @@ describe('restoreDatabase', () => {
     child.emit('close', 1);
 
     await expect(promise).rejects.toThrow(/magic string/);
+  });
+
+  it('drains stdout so a chatty child does not hang on the unread pipe buffer', async () => {
+    // A fake PassThrough has no OS-level pipe buffer, so it can't reproduce the
+    // real hang (writing past ~64KB with nothing reading it blocks 'close'
+    // forever on a real ChildProcess). Assert the fix directly instead: stdout
+    // must be put into flowing mode so a real pipe never backs up.
+    const child = fakeChild();
+    const resumeSpy = jest.spyOn(child.stdout, 'resume');
+    spawn.mockReturnValue(child);
+
+    const promise = restoreDatabase(Buffer.from('archive'));
+    child.emit('close', 0);
+    await promise;
+
+    expect(resumeSpy).toHaveBeenCalled();
+  });
+
+  it('rejects rather than crashing the process on a stdout stream error', async () => {
+    const child = fakeChild();
+    spawn.mockReturnValue(child);
+
+    const promise = restoreDatabase(Buffer.from('archive'));
+    child.stdout.emit('error', Object.assign(new Error('read EPIPE'), { code: 'EPIPE' }));
+
+    await expect(promise).rejects.toThrow(/EPIPE/);
+  });
+
+  it('rejects rather than crashing the process on a stderr stream error', async () => {
+    const child = fakeChild();
+    spawn.mockReturnValue(child);
+
+    const promise = restoreDatabase(Buffer.from('archive'));
+    child.stderr.emit('error', Object.assign(new Error('read EPIPE'), { code: 'EPIPE' }));
+
+    await expect(promise).rejects.toThrow(/EPIPE/);
   });
 });

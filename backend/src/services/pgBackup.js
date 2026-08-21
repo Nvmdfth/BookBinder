@@ -9,21 +9,31 @@ const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
 /**
  * Connection arguments, read from the same env vars db.js uses.
  *
+ * Mirrors db.js's exact fallback chain (DB_* first, then the standard PG*
+ * vars, then the hardcoded default) so a PG*-configured deployment backs up
+ * the same database the app actually serves. These are passed as explicit
+ * -h/-p/-U/-d flags, which override any PG* vars the child would otherwise
+ * inherit from the environment — so a mismatch here silently archives (or
+ * restores into) the wrong database rather than failing loudly.
+ *
  * Passed as an array to spawn with no shell, so a database name containing a
  * quote or a semicolon is an argument and never a second command.
  */
 function connectionArgs() {
   return [
-    '-h', process.env.DB_HOST || 'localhost',
-    '-p', String(process.env.DB_PORT || 5432),
-    '-U', process.env.DB_USER || 'postgres',
-    '-d', process.env.DB_NAME || 'bookbinder',
+    '-h', process.env.DB_HOST || process.env.PGHOST || 'localhost',
+    '-p', String(process.env.DB_PORT || process.env.PGPORT || 5432),
+    '-U', process.env.DB_USER || process.env.PGUSER || 'postgres',
+    '-d', process.env.DB_NAME || process.env.PGDATABASE || 'bookbinder',
   ];
 }
 
 /** The password never appears in argv, where any process listing would show it. */
 function childEnv() {
-  return { ...process.env, PGPASSWORD: process.env.DB_PASSWORD || 'postgres' };
+  return {
+    ...process.env,
+    PGPASSWORD: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'postgres',
+  };
 }
 
 function describeSpawnError(binary, error) {
@@ -103,6 +113,13 @@ function dumpDatabase({ maxBytes = MAX_ARCHIVE_BYTES } = {}) {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', (error) => fail(describeSpawnError('pg_dump', error)));
 
+    // 'error' on a stream with no listener throws, taking down the whole
+    // process rather than just failing this request. The size-cap path above
+    // calls child.kill(), which can raise EPIPE/ECONNRESET on these streams
+    // as the pipes tear down; route it into the same failure path instead.
+    child.stdout.on('error', (error) => fail(error));
+    child.stderr.on('error', (error) => fail(error));
+
     child.on('close', (code) => {
       closeReceived = true;
       closeCode = code;
@@ -137,6 +154,21 @@ function restoreDatabase(archive) {
 
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', (error) => fail(describeSpawnError('pg_restore', error)));
+
+    // 'error' on a stream with no listener throws and takes down the process
+    // instead of just failing this request — the same hazard as dumpDatabase.
+    child.stdout.on('error', (error) => fail(error));
+    child.stderr.on('error', (error) => fail(error));
+
+    // Nothing reads stdout: pg_restore writes little there, but on Node the
+    // 'close' event on the child never fires while a stdio pipe sits unread
+    // once the child writes past the OS pipe buffer (~64KB). Left unread,
+    // that means the promise never settles, the HTTP request never responds,
+    // and because --single-transaction has already issued its DROPs, every
+    // table is pinned under an ACCESS EXCLUSIVE lock until this process is
+    // killed by hand. Draining it (and discarding the bytes) is what lets
+    // 'close' fire normally.
+    child.stdout.resume();
 
     // EPIPE is expected if the child rejects the archive and exits early; the
     // close handler already owns that failure and reports the real stderr.
