@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthProvider';
+import BackupCard from '../components/BackupCard';
 import {
   ShieldAlert, Settings, Lock, Unlock, Trash2, Users,
   BookOpen, AlertCircle, CheckCircle, Database, Key,
@@ -431,6 +432,8 @@ export default function AdminConsole() {
             )}
           </div>
         </div>
+
+        <BackupCard />
 
         {/* 👥 User Account audits & management console (v1.1) */}
         <div style={{ ...styles.card, flex: '1 1 100%' }} className="card">
