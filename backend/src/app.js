@@ -10,6 +10,7 @@ const bookshelfRouter = require('./routes/bookshelfRouter');
 const bookRouter = require('./routes/bookRouter');
 const shareRouter = require('./routes/shareRouter');
 const settingsRouter = require('./routes/settingsRouter');
+const apiTokenRouter = require('./routes/apiTokenRouter');
 
 /**
  * Builds the configured Express application.
@@ -50,6 +51,9 @@ function createApp() {
   app.use('/api/books', bookRouter);
   app.use('/api/shares', shareRouter);
   app.use('/api/settings', settingsRouter);
+  // Mounted ahead of the (future) less-specific /api/admin router so this
+  // more specific path always wins the match.
+  app.use('/api/admin/tokens', apiTokenRouter);
 
   // Health Check API
   app.get('/api/health', (req, res) => {
