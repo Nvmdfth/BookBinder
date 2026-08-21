@@ -25,6 +25,18 @@ export default function BackupCard() {
   const [notice, setNotice] = useState('');
   const archiveInputRef = useRef(null);
 
+  /** Both banners share one visual slot; setting one must clear the other,
+   * or a failed download after a successful one shows red and green at once. */
+  const showError = (message) => {
+    setNotice('');
+    setError(message);
+  };
+
+  const showNotice = (message) => {
+    setError('');
+    setNotice(message);
+  };
+
   const loadTokens = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/tokens');
@@ -57,9 +69,9 @@ export default function BackupCard() {
       link.click();
       document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(url), 0);
-      setNotice('Backup downloaded.');
+      showNotice('Backup downloaded.');
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setBusy('');
     }
@@ -77,14 +89,14 @@ export default function BackupCard() {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || 'The restore failed.');
 
-      setNotice(payload.message || 'Database restored.');
+      showNotice(payload.message || 'Database restored.');
       setConfirmText('');
       setArchive(null);
       // The input is uncontrolled (a controlled file input can't be re-populated
       // by React), so its displayed filename has to be cleared imperatively too.
       if (archiveInputRef.current) archiveInputRef.current.value = '';
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setBusy('');
     }
@@ -106,20 +118,32 @@ export default function BackupCard() {
       setTokenName('');
       loadTokens();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     } finally {
       setBusy('');
     }
   };
 
   const handleRevokeToken = async (id, name) => {
+    // Without this guard, a second click while the first DELETE is still in
+    // flight lands after the row is already revoked_at IS NULL-guarded away —
+    // the API correctly 404s a request that names an already-revoked token,
+    // but the UI must not report that as a failure of a revoke that in fact
+    // succeeded. Reusing the `busy` string (rather than a boolean) keeps this
+    // consistent with the download/restore/mint actions above.
+    const busyKey = `revoke-${id}`;
+    if (busy === busyKey) return;
+
+    setBusy(busyKey);
     setError('');
     try {
       const res = await fetch(`/api/admin/tokens/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`Could not revoke "${name}".`);
       loadTokens();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
+    } finally {
+      setBusy('');
     }
   };
 
@@ -221,7 +245,21 @@ export default function BackupCard() {
             <div style={styles.mintedActions}>
               <button
                 className="btn btn-secondary"
-                onClick={() => navigator.clipboard?.writeText(mintedToken)}
+                onClick={() => {
+                  // In a non-secure context navigator.clipboard is undefined, and
+                  // even where it exists the write can reject (denied permission).
+                  // Unhandled, that is a silent no-op at best and an unhandled
+                  // promise rejection at worst — the admin gets no feedback
+                  // either way about whether the one-time token was captured.
+                  if (!navigator.clipboard) {
+                    showError('Clipboard access is unavailable; copy the token manually.');
+                    return;
+                  }
+                  navigator.clipboard.writeText(mintedToken).then(
+                    () => showNotice('Token copied to clipboard.'),
+                    () => showError('Could not copy the token automatically; copy it manually.')
+                  );
+                }}
               >
                 <Copy size={16} />
                 <span>Copy</span>
@@ -248,6 +286,7 @@ export default function BackupCard() {
                 className="btn btn-danger"
                 aria-label={`Revoke ${t.name}`}
                 onClick={() => handleRevokeToken(t.id, t.name)}
+                disabled={busy === `revoke-${t.id}`}
               >
                 <Trash2 size={16} />
               </button>
