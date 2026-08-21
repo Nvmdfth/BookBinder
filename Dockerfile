@@ -21,6 +21,14 @@ WORKDIR /app/backend
 # Set production context
 ENV NODE_ENV=production
 
+# Postgres client binaries for the admin backup/restore endpoints.
+#
+# The pg npm driver speaks the wire protocol only; producing and reading a
+# --format=custom archive needs pg_dump/pg_restore themselves. The major
+# version must match the postgres:16-alpine server in docker-compose.yml —
+# pg_restore refuses an archive from a newer major.
+RUN apk add --no-cache postgresql16-client
+
 # Copy backend dependencies manifest
 COPY backend/package*.json ./
 RUN npm install --only=production
