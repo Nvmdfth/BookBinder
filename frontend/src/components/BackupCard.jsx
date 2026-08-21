@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Database, Download, Upload, Key, Trash2, AlertTriangle, Copy } from 'lucide-react';
 
 /** The exact phrase the API demands. Both surfaces teach the same contract. */
@@ -23,6 +23,7 @@ export default function BackupCard() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const archiveInputRef = useRef(null);
 
   const loadTokens = useCallback(async () => {
     try {
@@ -49,8 +50,13 @@ export default function BackupCard() {
       const link = document.createElement('a');
       link.href = url;
       link.download = `bookbinder-${new Date().toISOString().slice(0, 10)}.dump`;
+      // Firefox and older Safari can silently drop the download if the anchor
+      // isn't attached to the document when clicked, or if the object URL is
+      // revoked before the click has been processed.
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
       setNotice('Backup downloaded.');
     } catch (err) {
       setError(err.message);
@@ -74,6 +80,9 @@ export default function BackupCard() {
       setNotice(payload.message || 'Database restored.');
       setConfirmText('');
       setArchive(null);
+      // The input is uncontrolled (a controlled file input can't be re-populated
+      // by React), so its displayed filename has to be cleared imperatively too.
+      if (archiveInputRef.current) archiveInputRef.current.value = '';
     } catch (err) {
       setError(err.message);
     } finally {
@@ -82,6 +91,7 @@ export default function BackupCard() {
   };
 
   const handleMintToken = async () => {
+    setBusy('mint');
     setError('');
     try {
       const res = await fetch('/api/admin/tokens', {
@@ -97,12 +107,20 @@ export default function BackupCard() {
       loadTokens();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy('');
     }
   };
 
-  const handleRevokeToken = async (id) => {
-    await fetch(`/api/admin/tokens/${id}`, { method: 'DELETE' });
-    loadTokens();
+  const handleRevokeToken = async (id, name) => {
+    setError('');
+    try {
+      const res = await fetch(`/api/admin/tokens/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Could not revoke "${name}".`);
+      loadTokens();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const restoreReady = confirmText === CONFIRM_PHRASE && archive !== null;
@@ -145,6 +163,7 @@ export default function BackupCard() {
           id="restore-archive"
           type="file"
           accept=".dump"
+          ref={archiveInputRef}
           onChange={(e) => setArchive(e.target.files[0] || null)}
         />
 
@@ -184,9 +203,13 @@ export default function BackupCard() {
           onChange={(e) => setTokenName(e.target.value)}
           placeholder="n8n nightly"
         />
-        <button className="btn btn-secondary" onClick={handleMintToken} disabled={!tokenName.trim()}>
+        <button
+          className="btn btn-secondary"
+          onClick={handleMintToken}
+          disabled={!tokenName.trim() || busy === 'mint'}
+        >
           <Key size={18} />
-          <span>Generate token</span>
+          <span>{busy === 'mint' ? 'Generating...' : 'Generate token'}</span>
         </button>
 
         {mintedToken && (
@@ -224,7 +247,7 @@ export default function BackupCard() {
               <button
                 className="btn btn-danger"
                 aria-label={`Revoke ${t.name}`}
-                onClick={() => handleRevokeToken(t.id)}
+                onClick={() => handleRevokeToken(t.id, t.name)}
               >
                 <Trash2 size={16} />
               </button>

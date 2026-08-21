@@ -80,3 +80,32 @@ describe('Token minting', () => {
     await waitFor(() => expect(screen.queryByText('bb_secretvalue')).not.toBeInTheDocument());
   });
 });
+
+describe('Token revocation', () => {
+  it('surfaces an error and keeps the token listed when the API returns 404', async () => {
+    // A 404 (per the documented DELETE contract) must not read as success:
+    // the token stays in the list and the failure is shown, not swallowed.
+    global.fetch = vi.fn((url, options = {}) => {
+      if (url === '/api/admin/tokens' && (options.method || 'GET') === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            { id: 1, name: 'n8n nightly', last_used_at: null, created_at: '2026-01-01' },
+          ]),
+        });
+      }
+      if (url === '/api/admin/tokens/1' && options.method === 'DELETE') {
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ error: 'Not found' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(<BackupCard />);
+
+    const revokeButton = await screen.findByRole('button', { name: /revoke n8n nightly/i });
+    await userEvent.click(revokeButton);
+
+    expect(await screen.findByText(/could not revoke/i)).toBeInTheDocument();
+    expect(screen.getByText('n8n nightly')).toBeInTheDocument();
+  });
+});
