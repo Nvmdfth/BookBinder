@@ -80,7 +80,10 @@ On a Linux host you'll find them under `/var/lib/docker/volumes/<name>/_data`. B
 
 **From the admin console**, open Admin Console → Database Backup & Restore. There you can:
 
-* **Download a backup** — a `pg_dump` archive of the database, streamed as an attachment.
+* **Download a backup** — a `pg_dump` archive of the database, sent as an attachment. The
+  export is buffered on the server and only sent once `pg_dump` has exited successfully —
+  it does not stream — so a dump that fails midway never arrives as a truncated file
+  carrying a `200`.
 * **Restore a backup** — upload an archive to replace the database. You must type `REPLACE_ALL_DATA` to confirm; this is a guard against automation firing by accident, not a security control, so treat it as seriously as you'd treat dropping the database yourself.
 * **Mint and revoke API tokens** — for scripting backups without a browser session (see below).
 
@@ -109,6 +112,8 @@ A failed dump returns `500` with a JSON error body rather than a truncated file,
 ### Restoring is destructive
 
 Restoring replaces every row in the database. Alongside the file, the restore endpoint requires a `confirm=REPLACE_ALL_DATA` field — without it, nothing happens. And because restoring rewrites the `users` table too, restoring an archive whose users differ from your current ones will sign you out; signing in again afterward is expected, not a bug.
+
+**Restoring also rewrites `api_tokens`,** since that table is part of the dump like any other. Any token minted after the archive was taken — including, potentially, the very credential the automation used to call the restore endpoint — reverts to whatever tokens existed at backup time and stops working. If a scheduled n8n job starts failing with `401` right after a restore, mint a fresh token from the console; this is expected, not a sign the restore went wrong.
 
 **A caveat on older backups:** restoring an archive taken before a schema change can fail. The restore drops the tables present in the archive before reloading them, and if a newer table (added since that backup) holds a foreign key into one of those tables, the drop is blocked and the restore aborts. This fails safe — the whole restore runs as one transaction, so a blocked drop rolls everything back and your current data is left untouched — but it does mean an old backup won't restore in place. The fix is to restore it into a fresh database instead.
 
