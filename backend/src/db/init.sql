@@ -111,3 +111,27 @@ CREATE INDEX IF NOT EXISTS idx_book_barcodes_book_id ON book_barcodes(book_id);
 -- scan of every mapping every user has ever filed.
 CREATE INDEX IF NOT EXISTS idx_user_books_book_id ON user_books(book_id);
 
+-- 12. API Tokens: machine credentials for automated backups.
+--
+-- The browser session is a cookie carrying a signature derived from the user's
+-- password hash, so it dies on every password change — correct for a browser,
+-- useless for a scheduled n8n job. These are independent credentials: revoked
+-- explicitly, never implicitly.
+--
+-- Only the SHA-256 hash is stored. The plaintext is shown once at creation and
+-- is unrecoverable afterwards. SHA-256 rather than bcrypt is deliberate: the
+-- input is 32 bytes of server-generated entropy, not a human-chosen password,
+-- so there is nothing to brute-force and a per-request KDF cost would tax only
+-- legitimate callers.
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    token_hash VARCHAR(64) UNIQUE NOT NULL,
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
+
