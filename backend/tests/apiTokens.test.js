@@ -34,6 +34,19 @@ describe('Admin guard on /api/admin/tokens', () => {
 
     expect(res.status).toBe(401);
   });
+
+  // I4: a Bearer token must not be able to manage tokens at all, admin-owned
+  // or not — otherwise a leaked token can mint its own successor, and
+  // revoking the leaked one no longer removes the attacker's access.
+  it.each(cases)('rejects %s %s carrying a valid admin Bearer token with 401, cookie-only', async (method, path) => {
+    mockSql([]);
+
+    const res = await request(app)[method](path)
+      .set('Authorization', 'Bearer bb_validtoken')
+      .send({ name: 'x' });
+
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('POST /api/admin/tokens', () => {
@@ -109,4 +122,20 @@ describe('DELETE /api/admin/tokens/:id', () => {
 
     expect(res.status).toBe(404);
   });
+
+  // M3: a non-numeric id used to reach Postgres and raise "invalid input
+  // syntax for type integer", which surfaced as a 500 where 404 belongs.
+  it.each(['abc', '1.5', '-1', '0', '1e3'])(
+    '404s a non-numeric id %p without querying the database',
+    async (id) => {
+      mockSql([], { authenticatedAs: 'admin' });
+
+      const res = await request(app)
+        .delete(`/api/admin/tokens/${encodeURIComponent(id)}`)
+        .set('Cookie', authCookie('admin'));
+
+      expect(res.status).toBe(404);
+      expect(sqlCalls().some((c) => REVOKE_TOKEN.test(c.sql))).toBe(false);
+    }
+  );
 });

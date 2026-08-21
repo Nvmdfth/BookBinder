@@ -16,6 +16,36 @@ const upload = multer({
   limits: { fileSize: MAX_ARCHIVE_BYTES },
 });
 
+/**
+ * multer's own errors carry no `.status`, so app.js's global handler would
+ * report both of these as a bare 500. Handled here instead of globally,
+ * since the right status and message depend on this route's own contract
+ * (the field must be named "file").
+ *
+ * An n8n HTTP Request node that sends the binary under any other field name
+ * hits LIMIT_UNEXPECTED_FILE; "Unexpected field" paired with a 500 is a
+ * miserable thing to debug against a webhook with no server console.
+ */
+function uploadArchive(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (!err) return next();
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: `File too large. Archives over ${MAX_ARCHIVE_BYTES} bytes are refused.`,
+      });
+    }
+
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        error: 'Unexpected field. The archive must be sent as the "file" field.',
+      });
+    }
+
+    return next(err);
+  });
+}
+
 router.use(authenticateApiToken);
 router.use((req, res, next) => (req.user ? next() : authenticateToken(req, res, next)));
 router.use(requireAdmin);
@@ -32,6 +62,9 @@ router.get('/backup', async (req, res) => {
     const archive = await dumpDatabase();
     const stamp = new Date().toISOString().slice(0, 10);
 
+    // The archive contains every user's row, bcrypt password hashes included —
+    // it must never sit in a shared cache or a browser's disk cache.
+    res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="bookbinder-${stamp}.dump"`);
     return res.send(archive);
@@ -48,7 +81,7 @@ router.get('/backup', async (req, res) => {
  * It is a guard against automation firing the wrong way: a retried or
  * misconfigured POST cannot destroy the database by accident.
  */
-router.post('/restore', upload.single('file'), async (req, res) => {
+router.post('/restore', uploadArchive, async (req, res) => {
   if (req.body?.confirm !== CONFIRM_PHRASE) {
     return res.status(400).json({
       error: `Restore replaces all data and cannot be undone. Send confirm="${CONFIRM_PHRASE}" to proceed.`,

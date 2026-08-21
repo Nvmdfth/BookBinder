@@ -1,15 +1,17 @@
 const express = require('express');
 const { query } = require('../db/db');
 const { authenticateToken, requireAdmin } = require('../middleware/authMiddleware');
-const { authenticateApiToken } = require('../middleware/apiTokenAuth');
 const { generateToken, hashToken } = require('../utils/apiToken');
 
 const router = express.Router();
 
-// Bearer first, cookie second: authenticateApiToken falls through when the
-// request carries no BookBinder token, leaving the browser path untouched.
-router.use(authenticateApiToken);
-router.use((req, res, next) => (req.user ? next() : authenticateToken(req, res, next)));
+// Cookie session only — deliberately, not authenticateApiToken. A Bearer
+// token minting or revoking its own successor defeats revocation as an
+// incident-response control: revoke the leaked token, and the attacker who
+// used it to mint a fresh one still holds a credential the admin never
+// issued. Token management therefore requires a browser session; Bearer
+// tokens remain valid on backupRouter.js, the endpoint n8n actually calls.
+router.use(authenticateToken);
 router.use(requireAdmin);
 
 /**
@@ -62,6 +64,13 @@ router.post('/', async (req, res) => {
  * available to answer "was this leaked credential ever used?"
  */
 router.delete('/:id', async (req, res) => {
+  // A non-numeric id makes Postgres raise `invalid input syntax for type
+  // integer`, which the catch below would otherwise report as a 500 where a
+  // 404 belongs — the id simply doesn't name any token.
+  if (!/^[1-9]\d*$/.test(req.params.id)) {
+    return res.status(404).json({ error: 'API token not found.' });
+  }
+
   try {
     const result = await query(
       'UPDATE api_tokens SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL RETURNING id',

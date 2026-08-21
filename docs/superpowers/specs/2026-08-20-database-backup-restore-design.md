@@ -175,7 +175,8 @@ and a per-request bcrypt cost would only slow legitimate calls.
 
 ### Middleware
 
-`middleware/apiTokenAuth.js` runs ahead of `authenticateToken` on admin routes:
+`middleware/apiTokenAuth.js` runs ahead of `authenticateToken` on the backup routes
+(`backupRouter.js` only — see [Bearer auth is admin-scoped only](#bearer-auth-is-admin-scoped-only)):
 
 1. No `Authorization: Bearer bb_...` header → fall through untouched to the existing
    cookie path.
@@ -192,14 +193,25 @@ must survive a password change, which is the entire reason they exist.
 
 ### Bearer auth is admin-scoped only
 
-The middleware is mounted on `/api/admin/*` and nowhere else. A token cannot read a
-bookshelf, add a book, or touch any other route.
+The middleware is mounted on `backupRouter.js` only — `GET /api/admin/backup` and
+`POST /api/admin/restore` — and nowhere else. A token cannot read a bookshelf, add a
+book, or touch any other route.
 
 That containment matters because **a token is an admin-equivalent secret**: it can
 download every user's row, bcrypt password hashes included, and it can trigger a
 restore. The UI says so at the point of creation. Narrowing further — a read-only
 scope that cannot restore — was considered and deferred as YAGNI; it can be added as
 a `scope` column without disturbing this design.
+
+**Token management is deliberately cookie-only.** `apiTokenRouter.js` (mint, list,
+revoke) does *not* mount `authenticateApiToken` — only the browser session cookie
+authenticates there, even though the same Bearer token would otherwise pass
+`requireAdmin` just as well. Without this restriction a leaked token could mint its
+own successor via `POST /api/admin/tokens`; revoking the leaked token would then
+leave the attacker holding a fresh credential the admin never issued, which defeats
+revocation as an incident-response control. Requiring a human in the browser to
+manage tokens closes that loop: revoking a token is final, because nothing minted
+after the leak was discovered can outlive the leaked one revoking it.
 
 ## Admin UI
 

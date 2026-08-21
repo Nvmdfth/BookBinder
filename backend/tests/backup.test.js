@@ -83,6 +83,19 @@ describe('GET /api/admin/backup', () => {
     expect(Buffer.from(res.body)).toEqual(Buffer.from('PGDMP-archive'));
   });
 
+  it('marks the response no-store, since the archive carries every password hash', async () => {
+    mockSql([], { authenticatedAs: 'admin' });
+    dumpDatabase.mockResolvedValue(Buffer.from('PGDMP-archive'));
+
+    const res = await request(app)
+      .get('/api/admin/backup')
+      .set('Cookie', authCookie('admin'))
+      .buffer()
+      .parse(binaryParser);
+
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it('reports a failed dump as a 500 with no attachment header', async () => {
     mockSql([], { authenticatedAs: 'admin' });
     dumpDatabase.mockRejectedValue(new Error('pg_dump: error: connection refused'));
