@@ -19,6 +19,7 @@ describe('Foundational tables (Req 4.2.2)', () => {
     'shelf_shares',
     'system_settings',
     'book_barcodes',
+    'api_tokens',
   ])('defines the %s table idempotently', (table) => {
     expect(normalized).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`, 'i'));
   });
@@ -76,5 +77,24 @@ describe('Migrations are additive', () => {
 
   it('never drops a column or table', () => {
     expect(normalized).not.toMatch(/DROP (TABLE|COLUMN)/i);
+  });
+});
+
+describe('API tokens (backup automation credentials)', () => {
+  it('stores only a hash, never the token itself', () => {
+    const block = normalized.match(/CREATE TABLE IF NOT EXISTS api_tokens[\s\S]*?\);/)[0];
+    expect(block).toMatch(/token_hash VARCHAR\(64\) UNIQUE NOT NULL/i);
+    expect(block).not.toMatch(/token VARCHAR/i);
+  });
+
+  it('cascades tokens away with their owning user', () => {
+    const block = normalized.match(/CREATE TABLE IF NOT EXISTS api_tokens[\s\S]*?\);/)[0];
+    expect(block).toMatch(/user_id INTEGER NOT NULL REFERENCES users\(id\) ON DELETE CASCADE/i);
+  });
+
+  it('revokes by timestamp rather than deletion, so last_used_at survives audit', () => {
+    const block = normalized.match(/CREATE TABLE IF NOT EXISTS api_tokens[\s\S]*?\);/)[0];
+    expect(block).toMatch(/revoked_at TIMESTAMP WITH TIME ZONE/i);
+    expect(block).toMatch(/last_used_at TIMESTAMP WITH TIME ZONE/i);
   });
 });

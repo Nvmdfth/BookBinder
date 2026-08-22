@@ -69,4 +69,58 @@ The tool never creates an account: an address it does not recognise is an error,
 
 ---
 
+## 💾 Backups
+
+Your data lives in two named Docker volumes:
+
+* **`bookbinder-pg-data`** — the Postgres cluster (books, shelves, users, everything relational).
+* **`bookbinder-uploads-data`** — avatar images.
+
+On a Linux host you'll find them under `/var/lib/docker/volumes/<name>/_data`. Both volumes survive `docker compose down`, container restarts, and image rebuilds — the only thing that destroys them is `docker compose down -v`.
+
+**From the admin console**, open Admin Console → Database Backup & Restore. There you can:
+
+* **Download a backup** — a `pg_dump` archive of the database, sent as an attachment. The
+  export is buffered on the server and only sent once `pg_dump` has exited successfully —
+  it does not stream — so a dump that fails midway never arrives as a truncated file
+  carrying a `200`.
+* **Restore a backup** — upload an archive to replace the database. You must type `REPLACE_ALL_DATA` to confirm; this is a guard against automation firing by accident, not a security control, so treat it as seriously as you'd treat dropping the database yourself.
+* **Mint and revoke API tokens** — for scripting backups without a browser session (see below).
+
+**Avatars are not included in a database backup.** Back up the uploads volume separately:
+
+```bash
+docker run --rm -v bookbinder-uploads-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/bookbinder-uploads-$(date +%F).tar.gz -C /data .
+```
+
+### Automating nightly backups with n8n
+
+Mint a token from the admin console, then wire up a simple workflow:
+
+```
+Schedule (nightly)
+  → HTTP Request
+      GET https://<host>/api/admin/backup
+      Header: Authorization: Bearer bb_...
+      Response format: File
+  → write to storage
+```
+
+A failed dump returns `500` with a JSON error body rather than a truncated file, so branch the workflow on the HTTP status code — there's no need to inspect the downloaded bytes to know whether the backup succeeded.
+
+### Restoring is destructive
+
+Restoring replaces every row in the database. Alongside the file, the restore endpoint requires a `confirm=REPLACE_ALL_DATA` field — without it, nothing happens. And because restoring rewrites the `users` table too, restoring an archive whose users differ from your current ones will sign you out; signing in again afterward is expected, not a bug.
+
+**Restoring also rewrites `api_tokens`,** since that table is part of the dump like any other. Any token minted after the archive was taken — including, potentially, the very credential the automation used to call the restore endpoint — reverts to whatever tokens existed at backup time and stops working. If a scheduled n8n job starts failing with `401` right after a restore, mint a fresh token from the console; this is expected, not a sign the restore went wrong.
+
+**A caveat on older backups:** restoring an archive taken before a schema change can fail. The restore drops the tables present in the archive before reloading them, and if a newer table (added since that backup) holds a foreign key into one of those tables, the drop is blocked and the restore aborts. This fails safe — the whole restore runs as one transaction, so a blocked drop rolls everything back and your current data is left untouched — but it does mean an old backup won't restore in place. The fix is to restore it into a fresh database instead.
+
+### API tokens are admin-equivalent secrets
+
+A token can download a backup containing every user's row, password hashes included, and can trigger a full restore. Treat it like an admin password: it's shown once at creation and never again, so store it somewhere durable immediately, and revoke it from the console the moment it's no longer needed.
+
+---
+
 *Made with love by Antigravity.*
