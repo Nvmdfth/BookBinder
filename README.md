@@ -94,17 +94,45 @@ docker run --rm -v bookbinder-uploads-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/bookbinder-uploads-$(date +%F).tar.gz -C /data .
 ```
 
-### Automating nightly backups
+### Automating backups
 
-Mint a token from the admin console, then have any scheduler or automation tool fetch the endpoint on a timer. All it needs is an HTTP GET with a bearer header, saving the response body to a file:
+Mint a token from the admin console, then point anything that can send a header and save a response body at the endpoint. The whole contract is four lines:
+
+| | |
+|---|---|
+| **Request** | `GET /api/admin/backup` |
+| **Auth** | `Authorization: Bearer bb_...` |
+| **Success** | `200`, and the body *is* the `.dump` archive |
+| **Failure** | `500` with a JSON error body — never a truncated file |
+
+Branch on the status code; there's no need to inspect the downloaded bytes to know whether the backup succeeded. The examples below are three ways to do that, none of them privileged over the others.
+
+**cron + curl**
 
 ```bash
-curl -fsS -H "Authorization: Bearer bb_..." \
-  -o "bookbinder-$(date +%F).dump" \
+0 3 * * * curl -fsS -H "Authorization: Bearer bb_..." \
+  -o "/backups/bookbinder-$(date +\%F).dump" \
   https://<host>/api/admin/backup
 ```
 
-A failed dump returns `500` with a JSON error body rather than a truncated file, so branch on the HTTP status code — there's no need to inspect the downloaded bytes to know whether the backup succeeded. (`curl -f` above turns that into a non-zero exit status for a cron job to catch.)
+`-f` makes curl exit non-zero on that `500`, so a failed backup is a failed cron job rather than a silent one. Note the escaped `\%` — crontab treats a bare `%` as a newline and the command will fail in a way that is genuinely annoying to diagnose.
+
+**n8n**
+
+```
+Schedule Trigger (nightly)
+  → HTTP Request
+      GET https://<host>/api/admin/backup
+      Header: Authorization: Bearer bb_...
+      Response format: File
+  → Write Binary File (or an S3 / Dropbox / Nextcloud node)
+```
+
+Set the HTTP Request node to **continue on fail** if you want the workflow to handle the `500` itself rather than halting — otherwise a failed dump stops the run, which is also a perfectly reasonable way to find out.
+
+**Postman, Insomnia, or any REST client**
+
+Set the `Authorization` header, send, then *Save response → Save to a file*. Worth doing once before you automate anything: it confirms the token works and that what comes back is a real archive. These clients won't run your nightly backup, though — for that, use a scheduler like the two above.
 
 ### Restoring is destructive
 

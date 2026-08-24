@@ -294,10 +294,28 @@ standing up Postgres in CI, which this repo does not do for any other subsystem.
 
 ## Automation usage
 
+The endpoint deliberately assumes nothing about its caller: a `GET`, a bearer header,
+and a response body that is the archive itself. Any scheduler that can send a header
+and save a body can drive it.
+
 ```bash
-curl -fsS -H "Authorization: Bearer bb_..."   -o "bookbinder-$(date +%F).dump"   https://<host>/api/admin/backup
+curl -fsS -H "Authorization: Bearer bb_..." \
+  -o "bookbinder-$(date +%F).dump" \
+  https://<host>/api/admin/backup
+```
+
+The same call from n8n, which is what this install actually runs:
+
+```
+Schedule Trigger (nightly)
+  → HTTP Request
+      GET https://<host>/api/admin/backup
+      Header: Authorization: Bearer bb_...
+      Response format: File
+  → Write Binary File
 ```
 
 A failed dump returns `500` with a JSON body, so the caller can branch on status
 rather than inspecting the downloaded bytes. That is the property the buffering
-decision above was made to guarantee.
+decision above was made to guarantee, and it is why no client needs to understand
+the archive format to know whether a backup worked.
