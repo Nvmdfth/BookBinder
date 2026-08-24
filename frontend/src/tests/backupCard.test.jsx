@@ -202,3 +202,30 @@ describe('Copy token feedback (M10)', () => {
     expect(await screen.findByText(/clipboard access is unavailable/i)).toBeInTheDocument();
   });
 });
+
+describe('API endpoint reference', () => {
+  it('shows the pull endpoint with the bearer header an automation needs', async () => {
+    render(<BackupCard />);
+
+    expect(await screen.findByText(/GET .*\/api\/admin\/backup/)).toBeInTheDocument();
+    // Both examples carry it — pulling and pushing use the same credential.
+    expect(screen.getAllByText(/Authorization: Bearer bb_/)).toHaveLength(2);
+  });
+
+  it('shows the push endpoint with both required multipart fields', async () => {
+    render(<BackupCard />);
+
+    expect(await screen.findByText(/POST .*\/api\/admin\/restore/)).toBeInTheDocument();
+    // Without the confirm field the endpoint 400s, so a reference that omits it
+    // would send the reader straight into a failure.
+    expect(screen.getByText(/confirm=REPLACE_ALL_DATA/)).toBeInTheDocument();
+    expect(screen.getByText(/file=@/)).toBeInTheDocument();
+  });
+
+  it('uses the host the admin is actually on, so the examples are runnable as shown', async () => {
+    render(<BackupCard />);
+
+    const pull = await screen.findByText(/GET .*\/api\/admin\/backup/);
+    expect(pull.textContent).toContain(window.location.origin);
+  });
+});
