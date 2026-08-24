@@ -44,6 +44,8 @@ Edit `.env` before the first boot. Three values matter:
 | `JWT_SECRET` | Signs session cookies. Change it from the example value, and don't change it afterwards — every existing session dies when you do. |
 | `BOOKBINDER_ADMIN_EMAIL` / `_PASS` | Seeds the first administrator, and **only** on a genuinely empty database. See [Administrator Access](#-administrator-access). |
 | `GOOGLE_BOOKS_API_KEY` | Optional but recommended. Without it, wildcard searches hit Google's unauthenticated rate limit and start returning `429`. |
+| `TRUST_PROXY_HOPS` | How many reverse proxies sit in front of the app. `1` (the default) suits a Cloudflare Tunnel or a single nginx; use `0` when the port is reachable directly. Getting this wrong matters — see below. |
+| `RATE_LIMIT_AUTH_MAX` / `_ADMIN_MAX` | Requests allowed per client IP per 15 minutes before a `429`. Defaults: 10 for `/api/auth/*`, 60 for `/api/admin/*`. |
 
 Then:
 
@@ -52,6 +54,14 @@ docker compose up -d --build
 ```
 
 The app is at **http://localhost:5000** (change with `PORT`). Sign in with the admin credentials you just set. Open registration is **off** by default — turn it on in the admin console if you want others to sign themselves up.
+
+### A note on `TRUST_PROXY_HOPS`
+
+The rate limiters identify a client by `req.ip`, and Express derives that from `X-Forwarded-For` — a header the client writes. This setting is what tells Express how much of it to believe.
+
+Set it to the number of proxies actually in front of the container. Too high and a client can forge the header to mint a fresh rate-limit budget on every request, defeating the throttle entirely; too low and every request appears to come from your proxy, so one attacker locks out everybody.
+
+Note that `docker-compose.yml` publishes port 5000 on the host. If that port is reachable from anywhere other than your tunnel, either set `TRUST_PROXY_HOPS=0` or bind the mapping to `127.0.0.1:${PORT}:5000` so only the local tunnel can reach it.
 
 ---
 

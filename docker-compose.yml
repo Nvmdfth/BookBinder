@@ -38,6 +38,11 @@ services:
       BOOKBINDER_ADMIN_EMAIL: ${BOOKBINDER_ADMIN_EMAIL:-admin@library.com}
       BOOKBINDER_ADMIN_PASS: ${BOOKBINDER_ADMIN_PASS:-adminpassword123}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      # Abuse protection. TRUST_PROXY_HOPS must match the number of proxies in
+      # front of this port, or the rate limiters key on a forgeable address.
+      RATE_LIMIT_AUTH_MAX: ${RATE_LIMIT_AUTH_MAX:-10}
+      RATE_LIMIT_ADMIN_MAX: ${RATE_LIMIT_ADMIN_MAX:-60}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       NODE_ENV: production
     volumes:
       # Persistent storage volume for user avatar image uploads

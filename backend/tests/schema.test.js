@@ -98,3 +98,16 @@ describe('API tokens (backup automation credentials)', () => {
     expect(block).toMatch(/last_used_at TIMESTAMP WITH TIME ZONE/i);
   });
 });
+
+describe('Cover URL migration (mixed-content fix)', () => {
+  const migration = normalized.match(/UPDATE books SET cover_image_url[\s\S]*?;/)[0];
+
+  it('anchors the rewrite to the scheme, so an http:// inside a query string survives', () => {
+    expect(migration).toMatch(/regexp_replace\(cover_image_url, '\^http:\/\/', 'https:\/\/'\)/);
+    expect(migration).not.toMatch(/replace\(cover_image_url, 'http:\/\/'/);
+  });
+
+  it('is re-run safe: after one pass no row matches its own WHERE clause', () => {
+    expect(migration).toMatch(/WHERE cover_image_url LIKE 'http:\/\/%'/);
+  });
+});
