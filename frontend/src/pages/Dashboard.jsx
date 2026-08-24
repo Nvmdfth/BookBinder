@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  FolderPlus, Compass, Users, BookOpen, Sparkles, RefreshCw,
+  FolderPlus, Compass, Users, BookOpen, Sparkles, RefreshCw, Search,
   AlertTriangle, MapPin,
 } from 'lucide-react';
 import BookVolume from '../components/BookVolume';
 import { CLOTHS } from '../utils/binding';
 import Modal from '../components/Modal';
+import LibrarySearchModal from '../components/LibrarySearchModal';
 
 /**
  * The miniature shelf of spines on a bookshelf card.
@@ -48,6 +49,8 @@ export default function Dashboard() {
   const [newShelfName, setNewShelfName] = useState('');
   const [newShelfDesc, setNewShelfDesc] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Book Roulette Modal State (Req v1.4)
   const [isRouletteModalOpen, setIsRouletteModalOpen] = useState(false);
@@ -227,6 +230,11 @@ export default function Dashboard() {
         </div>
 
         <div style={styles.headerActions}>
+          <button className="btn btn-secondary" onClick={() => setIsSearchOpen(true)}>
+            <Search size={17} />
+            <span>Search Library</span>
+          </button>
+
           <button className="btn btn-secondary" onClick={handleOpenRoulette}>
             <Sparkles size={17} />
             <span>Book Roulette</span>
@@ -427,6 +435,13 @@ export default function Dashboard() {
               </div>
             </form>
         </Modal>
+      )}
+
+      {isSearchOpen && (
+        <LibrarySearchModal
+          onClose={() => setIsSearchOpen(false)}
+          onNavigate={navigate}
+        />
       )}
 
       {/* Book Roulette Modal */}

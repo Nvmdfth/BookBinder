@@ -902,6 +902,83 @@ router.get('/lookup/:isbn', async (req, res) => {
 });
 
 /**
+ * GET /api/books/library-search - Search every shelf the caller can see.
+ *
+ * Distinct from /search above, which hunts the global catalogue and external
+ * providers for a book to *add*. This one answers the question the app exists
+ * for — "do I already own this, and where did I put it?" — across shelves,
+ * which previously required opening each one and filtering it by hand.
+ *
+ * One row per user_books mapping, not per book: two shelves holding the same
+ * title are two physical copies in two places, each with its own location and
+ * its own mapping_id for the caller to open.
+ */
+router.get('/library-search', async (req, res) => {
+  const rawQuery = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+  // Two characters is the floor the wildcard search already uses. Below it the
+  // pattern matches most of the library, which is slow and useless in equal
+  // measure — so refuse before reaching the database.
+  if (rawQuery.length < 2) {
+    return res.status(400).json({ error: 'Enter at least two characters to search your library.' });
+  }
+
+  const pattern = `%${rawQuery}%`;
+
+  try {
+    /*
+     * The visible CTE is the access boundary, and it mirrors the union in
+     * bookshelfRouter's shelf listing: a shelf qualifies either because the
+     * caller owns it or because a shelf_shares row grants it to them. A shelf
+     * belonging to someone else and never shared satisfies neither branch, so
+     * it cannot reach the join below.
+     */
+    const searchRes = await query(
+      `WITH visible AS (
+         SELECT b.id AS bookshelf_id, b.name AS bookshelf_name, b.is_wishlist,
+                'owner' AS role, u.email AS owner_email
+           FROM bookshelves b
+           JOIN users u ON b.user_id = u.id
+          WHERE b.user_id = $1
+
+         UNION ALL
+
+         SELECT b.id AS bookshelf_id, b.name AS bookshelf_name, b.is_wishlist,
+                s.permission AS role, u.email AS owner_email
+           FROM bookshelves b
+           JOIN shelf_shares s ON b.id = s.bookshelf_id
+           JOIN users u ON b.user_id = u.id
+          WHERE s.shared_with_user_id = $1
+       )
+       SELECT ub.id AS mapping_id, bk.id AS book_id, bk.isbn, bk.title, bk.author,
+              bk.cover_image_url, ub.physical_location, ub.notes, ub.is_read,
+              v.bookshelf_id, v.bookshelf_name, v.role, v.owner_email, v.is_wishlist,
+              CASE WHEN bk.title ILIKE $2 THEN 'title'
+                   WHEN bk.author ILIKE $2 THEN 'author'
+                   WHEN bk.isbn ILIKE $2 THEN 'isbn'
+                   WHEN ub.physical_location ILIKE $2 THEN 'location'
+                   ELSE 'notes'
+              END AS matched_on
+         FROM user_books ub
+         JOIN books bk ON ub.book_id = bk.id
+         JOIN visible v ON ub.bookshelf_id = v.bookshelf_id
+        WHERE bk.title ILIKE $2 OR bk.author ILIKE $2 OR bk.isbn ILIKE $2
+           OR ub.physical_location ILIKE $2 OR ub.notes ILIKE $2
+        ORDER BY bk.title ASC, v.bookshelf_name ASC
+        LIMIT 50`,
+      [req.user.id, pattern]
+    );
+
+    return res.json({ query: rawQuery, results: searchRes.rows });
+
+  } catch (error) {
+    console.error('Library Search Router Error:', error);
+    return res.status(500).json({ error: 'Internal server error searching your library.' });
+  }
+});
+
+
+/**
  * GET /api/books/roulette - Select a random unread book from the user's bookshelves
  */
 router.get('/roulette', async (req, res) => {
