@@ -1,5 +1,6 @@
 const express = require('express');
 const { query } = require('../db/db');
+const { normalizeCoverUrl } = require('../utils/coverUrl');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const { verifyBookshelfAccess, requireCollaborator } = require('../middleware/shareMiddleware');
 const { cleanISBN, isValidISBN, isValidBarcode, upcCore } = require('../utils/isbn');
@@ -158,7 +159,7 @@ async function queryExternalISBN(isbn) {
             title: info.title || 'Unknown Title',
             author: info.authors ? info.authors.join(', ') : 'Unknown Author',
             publisher: info.publisher || 'Unknown Publisher',
-            cover_image_url: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail) : null,
+            cover_image_url: normalizeCoverUrl(info.imageLinks && (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail)),
             page_count: info.pageCount || null,
             publication_date: info.publishedDate || null,
           };
@@ -198,7 +199,7 @@ async function queryExternalISBN(isbn) {
             title: info.title || 'Unknown Title',
             author: authorsStr,
             publisher: publishersStr,
-            cover_image_url: coverUrl,
+            cover_image_url: normalizeCoverUrl(coverUrl),
             page_count: info.number_of_pages || null,
             publication_date: info.publish_date || null,
           };
@@ -285,7 +286,7 @@ router.get('/search', async (req, res) => {
                   title: info.title,
                   author: info.authors ? info.authors.join(', ') : 'Unknown Author',
                   publisher: info.publisher || 'Unknown Publisher',
-                  cover_image_url: info.imageLinks ? (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail) : null,
+                  cover_image_url: normalizeCoverUrl(info.imageLinks && (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail)),
                   page_count: info.pageCount || null,
                   publication_date: info.publishedDate || null,
                   source: 'google_books',
@@ -328,7 +329,7 @@ router.get('/search', async (req, res) => {
                 title: doc.title,
                 author: doc.author_name ? doc.author_name.join(', ') : 'Unknown Author',
                 publisher: doc.publisher ? doc.publisher[0] : 'Unknown Publisher',
-                cover_image_url: coverUrl,
+                cover_image_url: normalizeCoverUrl(coverUrl),
                 page_count: doc.number_of_pages_median || null,
                 publication_date: doc.first_publish_year ? String(doc.first_publish_year) : null,
                 source: 'open_library',
@@ -508,7 +509,7 @@ router.post('/manual', async (req, res) => {
                 title.trim(),
                 author ? author.trim() : null,
                 publisher ? publisher.trim() : null,
-                coverImageUrl ? coverImageUrl.trim() : null,
+                normalizeCoverUrl(coverImageUrl && coverImageUrl.trim()),
                 pageCount ? parseInt(pageCount, 10) : null,
                 publicationDate ? publicationDate.trim() : null,
                 book.id,
@@ -530,7 +531,7 @@ router.post('/manual', async (req, res) => {
               title.trim(),
               author ? author.trim() : 'Unknown Author',
               publisher ? publisher.trim() : 'Unknown Publisher',
-              coverImageUrl ? coverImageUrl.trim() : null,
+              normalizeCoverUrl(coverImageUrl && coverImageUrl.trim()),
               pageCount ? parseInt(pageCount, 10) : null,
               publicationDate ? publicationDate.trim() : null,
             ]
@@ -812,7 +813,7 @@ router.put('/:bookId', async (req, res) => {
         title.trim(),
         author ? author.trim() : 'Unknown Author',
         publisher ? publisher.trim() : 'Unknown Publisher',
-        coverImageUrl ? coverImageUrl.trim() : null,
+        normalizeCoverUrl(coverImageUrl && coverImageUrl.trim()),
         pageCount ? parseInt(pageCount, 10) : null,
         publicationDate ? publicationDate.trim() : null,
         bookId,

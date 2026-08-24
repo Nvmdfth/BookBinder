@@ -135,3 +135,17 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
 
+
+-- 13. Migration: upgrade stored cover URLs from http to https.
+--
+-- Google Books hands back `imageLinks.thumbnail` as plain http, and rows
+-- written before normalizeCoverUrl() existed still carry it. Behind TLS a
+-- browser blocks those as mixed content, so every affected cover renders as
+-- the placeholder — invisibly, since the app looks correct over
+-- http://localhost during development.
+--
+-- Anchored to the scheme so an http:// inside a query string is left alone,
+-- and self-limiting: once rewritten, no row matches the WHERE clause again.
+UPDATE books
+   SET cover_image_url = regexp_replace(cover_image_url, '^http://', 'https://')
+ WHERE cover_image_url LIKE 'http://%';

@@ -24,6 +24,14 @@ services:
       BOOKBINDER_ADMIN_EMAIL: e2e-admin@library.com
       BOOKBINDER_ADMIN_PASS: e2e-password-123
       JWT_SECRET: bookbinder_e2e_signing_key
+      # Specs register a fresh account per test to stay isolated, which is
+      # exactly the traffic shape the credential limiter exists to stop. Raise
+      # it here rather than loosening the production default: the limiter's own
+      # behaviour is covered in backend/tests/rateLimit.test.js.
+      RATE_LIMIT_AUTH_MAX: 100000
+      # Every request arrives from the Playwright runner on the host with no
+      # proxy in between, so trust the socket address rather than a header.
+      TRUST_PROXY_HOPS: 0
     volumes:
       - uploads_data_e2e:/app/backend/uploads
 
