@@ -4,6 +4,29 @@ import { Database, Download, Upload, Key, Trash2, AlertTriangle, Copy } from 'lu
 /** The exact phrase the API demands. Both surfaces teach the same contract. */
 const CONFIRM_PHRASE = 'REPLACE_ALL_DATA';
 
+/*
+ * Shown in the admin console so an operator can wire up an automation without
+ * going to find the docs. Built from the live origin rather than a placeholder
+ * host, so the examples are runnable exactly as displayed.
+ */
+const API_ORIGIN = typeof window !== 'undefined' ? window.location.origin : '';
+
+const PULL_EXAMPLE = `GET ${API_ORIGIN}/api/admin/backup
+  Authorization: Bearer bb_...
+
+curl -fsS -H "Authorization: Bearer bb_..." \\
+  -o "bookbinder-$(date +%F).dump" \\
+  ${API_ORIGIN}/api/admin/backup`;
+
+const PUSH_EXAMPLE = `POST ${API_ORIGIN}/api/admin/restore
+  Authorization: Bearer bb_...
+  multipart/form-data: file=@backup.dump, confirm=REPLACE_ALL_DATA
+
+curl -fsS -X POST -H "Authorization: Bearer bb_..." \\
+  -F "file=@bookbinder-2026-08-24.dump" \\
+  -F "confirm=REPLACE_ALL_DATA" \\
+  ${API_ORIGIN}/api/admin/restore`;
+
 const UPLOADS_BACKUP_CMD =
   'docker run --rm -v bookbinder-uploads-data:/data -v "$PWD":/backup alpine \\\n' +
   '  tar czf /backup/bookbinder-uploads-$(date +%F).tar.gz -C /data .';
@@ -220,6 +243,22 @@ export default function BackupCard() {
           every user&apos;s data and can trigger a restore — treat it as a password.
         </p>
 
+        <div style={styles.endpoints}>
+          <span style={styles.endpointsTitle}>Endpoints</span>
+
+          <span style={styles.endpointLabel}>Pull a backup</span>
+          <pre style={styles.code}>{PULL_EXAMPLE}</pre>
+
+          <span style={styles.endpointLabel}>Push one back</span>
+          <pre style={styles.code}>{PUSH_EXAMPLE}</pre>
+
+          <span style={styles.endpointNote}>
+            A failed backup returns <code>500</code> with a JSON body rather than a partial
+            file, so a scheduled job can branch on the status code instead of inspecting
+            the bytes. Restore refuses anything without the exact confirmation field.
+          </span>
+        </div>
+
         <label style={styles.label} htmlFor="token-name">Token name</label>
         <input
           id="token-name"
@@ -372,6 +411,34 @@ const styles = {
     backgroundColor: 'var(--bg-primary)',
     padding: '10px',
     borderRadius: 'var(--radius-sm)',
+  },
+  endpoints: {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '14px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--bg-primary)',
+  },
+  endpointsTitle: {
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+  },
+  endpointLabel: {
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    marginTop: '6px',
+  },
+  endpointNote: {
+    fontSize: '0.75rem',
+    color: 'var(--text-muted)',
+    lineHeight: 1.5,
+    marginTop: '6px',
   },
   mintedActions: { display: 'flex', gap: '8px' },
   tokenList: { listStyle: 'none', width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' },
