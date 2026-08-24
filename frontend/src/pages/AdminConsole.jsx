@@ -484,13 +484,17 @@ export default function AdminConsole() {
                           }}>
                             {u.role}
                           </span>
+                          {/* Labelled rather than icon-only: granting administrator
+                              rights is not an action anyone should have to discover
+                              by hovering a 14px glyph. */}
                           {!isSelf && (
-                            <button 
-                              style={styles.inlineActionBtn}
+                            <button
+                              style={styles.roleToggleBtn}
                               onClick={() => handleToggleUserRole(u)}
                               title={u.role === 'admin' ? 'Demote to standard user' : 'Promote to administrator'}
                             >
-                              <ShieldCheck size={14} />
+                              <ShieldCheck size={13} />
+                              <span>{u.role === 'admin' ? 'Remove admin' : 'Make admin'}</span>
                             </button>
                           )}
                         </div>
@@ -1017,6 +1021,21 @@ const styles = {
     padding: '2px 8px',
     borderRadius: '4px',
     letterSpacing: '0.05em',
+  },
+  roleToggleBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    padding: '3px 9px',
+    borderRadius: '999px',
+    border: '1px solid var(--rule)',
+    background: 'transparent',
+    color: 'var(--text-secondary)',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'var(--transition-smooth)',
   },
   inlineActionBtn: {
     background: 'none',

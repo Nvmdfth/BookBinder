@@ -151,7 +151,18 @@ export function AuthProvider({ children }) {
         updateUserPreferences,
         impersonateUser,
         stopImpersonation,
-        isAdmin: user?.role === 'admin' || user?.impersonator?.role === 'admin',
+        /*
+         * The *effective* role, deliberately not the impersonator's.
+         *
+         * This once also returned true when an admin was impersonating, which
+         * kept the Admin tab in the nav during impersonation. The server reads
+         * the effective role, so every request behind that tab came back 403 —
+         * a console that rendered and then failed at everything. It also broke
+         * the point of impersonation, which is to see exactly what that user
+         * sees. Getting back out is the banner's job, and that is gated on
+         * isImpersonating rather than on this.
+         */
+        isAdmin: user?.role === 'admin',
         isImpersonating: !!user?.isImpersonating,
         impersonator: user?.impersonator || null,
       }}
