@@ -57,11 +57,21 @@ function createApp() {
 
   // Register API Route Mounts
   /*
-   * Throttle the credential surface before the routers see it. Login and
-   * registration are the endpoints an internet-exposed instance gets guessed
-   * at, and bcrypt alone is a cost per attempt, not a ceiling on them.
+   * Throttle the two endpoints that accept a credential guess — and only those.
+   *
+   * Mounting this on the whole /api/auth prefix also covered GET /me, which
+   * AuthProvider calls on every app load to check the session. Ten reloads in a
+   * quarter hour and the session check itself started returning 429, which the
+   * client cannot distinguish from being signed out. /logout and
+   * /registration-status carry no secret to guess either.
+   *
+   * One shared limiter across both paths, so an attacker cannot spend a budget
+   * on /login and then collect a fresh one on /register.
    */
-  app.use('/api/auth', createAuthLimiter(), authRouter);
+  const authLimiter = createAuthLimiter();
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth', authRouter);
   app.use('/api/users', userRouter);
   app.use('/api/bookshelves', bookshelfRouter);
   app.use('/api/books', bookRouter);
