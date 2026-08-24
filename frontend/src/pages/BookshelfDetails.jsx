@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
 import BookVolume from '../components/BookVolume';
 import Modal from '../components/Modal';
@@ -23,6 +23,7 @@ const SORTS = [
 
 export default function BookshelfDetails() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const [shelf, setShelf] = useState(null);
@@ -241,6 +242,30 @@ export default function BookshelfDetails() {
     // should only re-run when the route param changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  /*
+   * Global search links to one copy: /bookshelves/:id?book=:mappingId. Open it
+   * once the shelf's books have arrived — the param names a mapping this page
+   * has not loaded yet at mount.
+   *
+   * The param is then dropped with `replace` so it does not linger: without
+   * that, closing the dialog and pressing Back would reopen it, and a later
+   * refresh would too. A mapping that is no longer here — moved to another
+   * shelf, or deleted since the link was made — simply opens nothing.
+   */
+  useEffect(() => {
+    const requested = searchParams.get('book');
+    if (!requested || !shelf?.books) return;
+
+    const mappingId = Number.parseInt(requested, 10);
+    if (Number.isInteger(mappingId) && shelf.books.some((b) => b.mapping_id === mappingId)) {
+      setViewingBook(mappingId);
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('book');
+    setSearchParams(next, { replace: true });
+  }, [shelf, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (shelf?.isOwner) {
