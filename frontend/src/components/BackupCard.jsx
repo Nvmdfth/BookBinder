@@ -64,7 +64,11 @@ export default function BackupCard() {
   const loadTokens = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/tokens');
-      if (res.ok) setTokens(await res.json());
+      if (!res.ok) return;
+      const payload = await res.json();
+      // A 200 carrying something other than a list would otherwise reach
+      // tokens.map() and crash the whole admin console, not just this card.
+      setTokens(Array.isArray(payload) ? payload : []);
     } catch {
       // A token list that fails to load must not take the backup controls with it.
     }

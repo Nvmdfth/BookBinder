@@ -73,3 +73,64 @@ describe('Impersonation UI Banner (Layout)', () => {
     expect(screen.queryByText(/Currently Impersonating/i)).not.toBeInTheDocument();
   });
 });
+
+describe('Admin tab visibility (Layout)', () => {
+  const base = {
+    stopImpersonation: vi.fn(),
+    logout: vi.fn(),
+  };
+
+  const renderNav = () =>
+    render(
+      <MemoryRouter>
+        <Layout>
+          <div>Page Content</div>
+        </Layout>
+      </MemoryRouter>
+    );
+
+  it('shows the Admin tab to an administrator', () => {
+    mockAuth.current = {
+      ...base,
+      user: { id: 9, email: 'admin@library.com', role: 'admin' },
+      isImpersonating: false,
+      impersonator: null,
+      isAdmin: true,
+    };
+
+    renderNav();
+
+    expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
+  });
+
+  it('hides the Admin tab from a standard user', () => {
+    mockAuth.current = {
+      ...base,
+      user: { id: 3, email: 'plain@library.com', role: 'user' },
+      isImpersonating: false,
+      impersonator: null,
+      isAdmin: false,
+    };
+
+    renderNav();
+
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+  });
+
+  it('hides the Admin tab while an admin is impersonating, leaving the banner as the way back', () => {
+    mockAuth.current = {
+      ...base,
+      user: { id: 3, email: 'plain@library.com', role: 'user' },
+      isImpersonating: true,
+      impersonator: { id: 9, email: 'admin@library.com', role: 'admin' },
+      isAdmin: false,
+    };
+
+    renderNav();
+
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    // Removing the tab must not strand the admin: the banner's control is
+    // gated on isImpersonating, not isAdmin.
+    expect(screen.getByRole('button', { name: /switch back to main profile/i })).toBeInTheDocument();
+  });
+});
