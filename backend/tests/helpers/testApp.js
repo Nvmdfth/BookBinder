@@ -8,11 +8,32 @@
 const jwt = require('jsonwebtoken');
 
 // Mocked for every consumer of the module, since all routers require this same path.
-jest.mock('../../src/db/db', () => ({
-  query: jest.fn(),
-  pool: { connect: jest.fn(), on: jest.fn() },
-  initDb: jest.fn(),
-}));
+//
+// withTransaction is the real implementation rather than a stand-in: the whole
+// point of the routes that use it is the BEGIN/COMMIT/ROLLBACK sequencing, and a
+// double would let that sequencing be wrong while the tests stayed green. Only
+// the driver underneath is faked. The transaction client shares one handler
+// table with the pooled query, so a test declares its SQL once no matter which
+// of the two issues it, and sqlCalls() sees the statements from both.
+const mockQuery = jest.fn();
+
+jest.mock('../../src/db/db', () => {
+  const { withTransaction } = require('../../src/db/transaction');
+  const pool = {
+    connect: async () => ({
+      query: (text, params) => mockQuery(text, params),
+      release: () => {},
+    }),
+    on: jest.fn(),
+  };
+
+  return {
+    query: mockQuery,
+    pool,
+    initDb: jest.fn(),
+    withTransaction: (fn) => withTransaction(pool, fn),
+  };
+});
 
 const { query } = require('../../src/db/db');
 const { createApp } = require('../../src/app');
@@ -74,6 +95,11 @@ function mockSql(handlers, { authenticatedAs = 'owner', authOverrides = {} } = {
      * "held nowhere" rather than forcing each one to restate it.
      */
     [/FROM user_books ub JOIN bookshelves bs/, []],
+    /*
+     * Transaction control statements. Tests asserting atomicity read these back
+     * out of sqlCalls() rather than handling them, so they default to succeeding.
+     */
+    [/^(BEGIN|COMMIT|ROLLBACK)$/, []],
   ];
 
   query.mockImplementation(async (text, params) => {

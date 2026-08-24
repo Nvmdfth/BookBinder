@@ -1,5 +1,5 @@
 const express = require('express');
-const { query } = require('../db/db');
+const { query, withTransaction } = require('../db/db');
 const { normalizeCoverUrl } = require('../utils/coverUrl');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const { verifyBookshelfAccess, requireCollaborator } = require('../middleware/shareMiddleware');
@@ -84,12 +84,16 @@ async function findHoldings(bookId, userId) {
  *
  * Re-entering a barcode reassigns it: the correction the user just typed is more
  * trustworthy than whatever the alias pointed at before.
+ *
+ * Takes the executor so it can join the caller's transaction: the alias points
+ * at a book row, and learning it outside the unit that writes that row would
+ * leave the mapping dangling if the ingestion is rolled back.
  */
-async function learnBarcodeAlias(barcode, bookId) {
+async function learnBarcodeAlias(barcode, bookId, exec = query) {
   const core = upcCore(barcode);
   if (!core) return;
 
-  await query(
+  await exec(
     `INSERT INTO book_barcodes (barcode, book_id)
      VALUES ($1, $2)
      ON CONFLICT (barcode) DO UPDATE SET book_id = EXCLUDED.book_id`,
@@ -373,35 +377,24 @@ router.post('/scan/:isbn', async (req, res, next) => {
         // 2. Database Deduplication Check: Check global catalog first
         let book = await findCatalogBook(isbn);
 
+        let externalData = null;
+
         if (book) {
           console.log(`💾 Cache hit: retrieved "${book.title}" from local catalog index.`);
         } else {
-          // 3. Fallback: Search external APIs (with 12-second total threshold)
+          /*
+           * 3. Fallback: Search external APIs (with 12-second total threshold).
+           *
+           * Deliberately outside the transaction below. A pooled client held
+           * across a network call this long would starve concurrent scans, so
+           * the metadata is resolved first and only then written.
+           */
           try {
-            const externalData = await withTimeout(
+            externalData = await withTimeout(
               queryExternalISBN(isbn),
               12000,
               'External ISBN lookups timed out (12s limit reached)'
             );
-
-            if (externalData) {
-              // Save partial/complete metadata to global catalog
-              const insertRes = await query(
-                `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 RETURNING *`,
-                [
-                  externalData.isbn,
-                  externalData.title,
-                  externalData.author,
-                  externalData.publisher,
-                  externalData.cover_image_url,
-                  externalData.page_count,
-                  externalData.publication_date,
-                ]
-              );
-              book = insertRes.rows[0];
-            }
           } catch (timeoutErr) {
             console.error('⚠️ ISBN Ingestion lookup error:', timeoutErr.message);
             // Seamlessly signal frontend to redirect to pre-populated manual forms
@@ -412,44 +405,85 @@ router.post('/scan/:isbn', async (req, res, next) => {
         }
 
         // 4. Ingestion Fail: Book not resolved via caching or external lookup
-        if (!book) {
+        if (!book && !externalData) {
           return res.status(404).json(
             manualFallback(isbn, 'Book details not found. Please enter details manually.')
           );
         }
 
-        // 5. Prevent identical double map inside same shelf
-        const mapCheck = await query(
-          'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
-          [activeBookshelfId, book.id]
-        );
+        /*
+         * 5. Catalog row and shelf mapping are one unit of work.
+         *
+         * On the pool these autocommit separately, so a failure after the books
+         * insert leaves a catalog row no user_books row references. Nothing
+         * cascades that direction, so it would survive as an orphan until an
+         * admin pruned it by hand.
+         */
+        const outcome = await withTransaction(async (tx) => {
+          let catalogBook = book;
 
-        if (mapCheck.rows.length > 0) {
-          return res.status(409).json({
-            error: `"${book.title}" is already mapped inside this bookshelf.`,
-            book: book,
-          });
-        }
+          if (!catalogBook) {
+            // Save partial/complete metadata to global catalog
+            const insertRes = await tx(
+              `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING *`,
+              [
+                externalData.isbn,
+                externalData.title,
+                externalData.author,
+                externalData.publisher,
+                externalData.cover_image_url,
+                externalData.page_count,
+                externalData.publication_date,
+              ]
+            );
+            catalogBook = insertRes.rows[0];
+          }
 
-        // 6. Map Book to User's Bookshelf
-        const newMap = await query(
-          `INSERT INTO user_books (user_id, bookshelf_id, book_id, physical_location, notes)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, physical_location, notes, created_at`,
-          [
-            req.user.id,
-            activeBookshelfId,
-            book.id,
-            physicalLocation ? physicalLocation.trim() : null,
-            notes ? notes.trim() : null,
-          ]
-        );
+          // Prevent identical double map inside same shelf
+          const mapCheck = await tx(
+            'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
+            [activeBookshelfId, catalogBook.id]
+          );
 
-        return res.status(201).json({
-          message: 'Book indexed and added to bookshelf successfully.',
-          mapping: newMap.rows[0],
-          book: book,
+          if (mapCheck.rows.length > 0) {
+            return {
+              status: 409,
+              body: {
+                error: `"${catalogBook.title}" is already mapped inside this bookshelf.`,
+                book: catalogBook,
+              },
+            };
+          }
+
+          // Map Book to User's Bookshelf
+          const newMap = await tx(
+            `INSERT INTO user_books (user_id, bookshelf_id, book_id, physical_location, notes)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, physical_location, notes, created_at`,
+            [
+              req.user.id,
+              activeBookshelfId,
+              catalogBook.id,
+              physicalLocation ? physicalLocation.trim() : null,
+              notes ? notes.trim() : null,
+            ]
+          );
+
+          return {
+            status: 201,
+            body: {
+              message: 'Book indexed and added to bookshelf successfully.',
+              mapping: newMap.rows[0],
+              book: catalogBook,
+            },
+          };
         });
+
+        // Sent only once the transaction has committed, so a commit failure
+        // surfaces as a 500 rather than a success the database never kept.
+        return res.status(outcome.status).json(outcome.body);
 
       } catch (error) {
         console.error('Scan Book Router Error:', error);
@@ -488,94 +522,116 @@ router.post('/manual', async (req, res) => {
       try {
         const activeBookshelfId = req.shelfAccess.bookshelfId;
         const cleanedIsbn = cleanISBN(isbn) || null;
-        let book = null;
 
-        // 2. If ISBN provided, check global catalog first
-        if (cleanedIsbn) {
-          const bookRes = await query('SELECT * FROM books WHERE isbn = $1', [cleanedIsbn]);
-          if (bookRes.rows.length > 0) {
-            book = bookRes.rows[0];
-            // Enrich existing cache if missing fields are provided
-            await query(
-              `UPDATE books 
-               SET title = COALESCE($1, title), 
-                   author = COALESCE($2, author), 
-                   publisher = COALESCE($3, publisher), 
-                   cover_image_url = COALESCE($4, cover_image_url), 
-                   page_count = COALESCE($5, page_count), 
-                   publication_date = COALESCE($6, publication_date) 
-               WHERE id = $7`,
+        /*
+         * Catalog row, barcode alias and shelf mapping are one unit of work.
+         *
+         * This path resolves nothing externally, so the whole sequence can be
+         * held open. On the pool each statement autocommits alone: a failure
+         * partway through would leave a catalog row nothing references — and
+         * possibly a barcode alias pointing at it — with no cascade to clean
+         * either up, since the FK only runs books → user_books.
+         */
+        const outcome = await withTransaction(async (tx) => {
+          let book = null;
+
+          // 2. If ISBN provided, check global catalog first
+          if (cleanedIsbn) {
+            const bookRes = await tx('SELECT * FROM books WHERE isbn = $1', [cleanedIsbn]);
+            if (bookRes.rows.length > 0) {
+              book = bookRes.rows[0];
+              // Enrich existing cache if missing fields are provided
+              await tx(
+                `UPDATE books
+                 SET title = COALESCE($1, title),
+                     author = COALESCE($2, author),
+                     publisher = COALESCE($3, publisher),
+                     cover_image_url = COALESCE($4, cover_image_url),
+                     page_count = COALESCE($5, page_count),
+                     publication_date = COALESCE($6, publication_date)
+                 WHERE id = $7`,
+                [
+                  title.trim(),
+                  author ? author.trim() : null,
+                  publisher ? publisher.trim() : null,
+                  normalizeCoverUrl(coverImageUrl && coverImageUrl.trim()),
+                  pageCount ? parseInt(pageCount, 10) : null,
+                  publicationDate ? publicationDate.trim() : null,
+                  book.id,
+                ]
+              );
+            }
+          }
+
+          // 3. If book still does not exist, create global catalog row
+          if (!book) {
+            // Generate a mock unique ISBN if not provided
+            const finalIsbn = cleanedIsbn || `MANUAL-${Date.now()}`;
+            const insertRes = await tx(
+              `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING *`,
               [
+                finalIsbn,
                 title.trim(),
-                author ? author.trim() : null,
-                publisher ? publisher.trim() : null,
+                author ? author.trim() : 'Unknown Author',
+                publisher ? publisher.trim() : 'Unknown Publisher',
                 normalizeCoverUrl(coverImageUrl && coverImageUrl.trim()),
                 pageCount ? parseInt(pageCount, 10) : null,
                 publicationDate ? publicationDate.trim() : null,
-                book.id,
               ]
             );
+            book = insertRes.rows[0];
           }
-        }
 
-        // 3. If book still does not exist, create global catalog row
-        if (!book) {
-          // Generate a mock unique ISBN if not provided
-          const finalIsbn = cleanedIsbn || `MANUAL-${Date.now()}`;
-          const insertRes = await query(
-            `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING *`,
+          // 3b. Learn the barcode this entry came from. A UPC-A cannot be resolved
+          // by any provider, so the only way the next scan of this paperback skips
+          // this form is by remembering what the user just told us.
+          await learnBarcodeAlias(scannedBarcode, book.id, tx);
+
+          // 4. Prevent duplicate bookshelf mapping
+          const mapCheck = await tx(
+            'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
+            [activeBookshelfId, book.id]
+          );
+
+          if (mapCheck.rows.length > 0) {
+            return {
+              status: 409,
+              body: {
+                error: `"${book.title}" is already mapped inside this bookshelf.`,
+                book: book,
+              },
+            };
+          }
+
+          // 5. Create user_books shelf mapping association
+          const newMap = await tx(
+            `INSERT INTO user_books (user_id, bookshelf_id, book_id, physical_location, notes)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, physical_location, notes, created_at`,
             [
-              finalIsbn,
-              title.trim(),
-              author ? author.trim() : 'Unknown Author',
-              publisher ? publisher.trim() : 'Unknown Publisher',
-              normalizeCoverUrl(coverImageUrl && coverImageUrl.trim()),
-              pageCount ? parseInt(pageCount, 10) : null,
-              publicationDate ? publicationDate.trim() : null,
+              req.user.id,
+              activeBookshelfId,
+              book.id,
+              physicalLocation ? physicalLocation.trim() : null,
+              notes ? notes.trim() : null,
             ]
           );
-          book = insertRes.rows[0];
-        }
 
-        // 3b. Learn the barcode this entry came from. A UPC-A cannot be resolved
-        // by any provider, so the only way the next scan of this paperback skips
-        // this form is by remembering what the user just told us.
-        await learnBarcodeAlias(scannedBarcode, book.id);
-
-        // 4. Prevent duplicate bookshelf mapping
-        const mapCheck = await query(
-          'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
-          [activeBookshelfId, book.id]
-        );
-
-        if (mapCheck.rows.length > 0) {
-          return res.status(409).json({
-            error: `"${book.title}" is already mapped inside this bookshelf.`,
-            book: book,
-          });
-        }
-
-        // 5. Create user_books shelf mapping association
-        const newMap = await query(
-          `INSERT INTO user_books (user_id, bookshelf_id, book_id, physical_location, notes)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, physical_location, notes, created_at`,
-          [
-            req.user.id,
-            activeBookshelfId,
-            book.id,
-            physicalLocation ? physicalLocation.trim() : null,
-            notes ? notes.trim() : null,
-          ]
-        );
-
-        return res.status(201).json({
-          message: 'Book registered manually and added to bookshelf successfully.',
-          mapping: newMap.rows[0],
-          book: book,
+          return {
+            status: 201,
+            body: {
+              message: 'Book registered manually and added to bookshelf successfully.',
+              mapping: newMap.rows[0],
+              book: book,
+            },
+          };
         });
+
+        // Sent only once the transaction has committed, so a commit failure
+        // surfaces as a 500 rather than a success the database never kept.
+        return res.status(outcome.status).json(outcome.body);
 
       } catch (error) {
         console.error('Manual Book Router Error:', error);

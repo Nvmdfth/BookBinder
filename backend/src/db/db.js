@@ -2,6 +2,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { withTransaction: runInTransaction } = require('./transaction');
 
 // Load env configurations
 require('dotenv').config();
@@ -23,6 +24,12 @@ pool.on('error', (err) => {
 });
 
 const query = (text, params) => pool.query(text, params);
+
+/**
+ * Run fn's statements as one atomic unit against a single pooled client.
+ * See transaction.js for the contract and the caveat about external I/O.
+ */
+const withTransaction = (fn) => runInTransaction(pool, fn);
 
 /**
  * Initializes the database schema and seeds default configuration/admin records
@@ -78,5 +85,6 @@ async function initDb() {
 module.exports = {
   pool,
   query,
+  withTransaction,
   initDb,
 };
