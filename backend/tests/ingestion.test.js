@@ -288,3 +288,148 @@ describe('Manual entry path (fallback layout)', () => {
     expect(insert.params[0]).toMatch(/^MANUAL-/);
   });
 });
+
+/**
+ * Atomicity of the two-row write (orphan prevention).
+ *
+ * Ingestion writes a shared `books` row and a `user_books` mapping. The FK
+ * cascades books → user_books and never the reverse, so a catalog row that
+ * loses its mapping is unreachable and permanent. Issued on the pool the two
+ * inserts autocommit separately, and a failure between them strands the first.
+ */
+describe('Catalog and mapping are written atomically', () => {
+  const sqlText = () => sqlCalls().map((c) => c.sql);
+  const indexOf = (pattern) => sqlText().findIndex((s) => pattern.test(s));
+
+  it('commits the catalog insert and the mapping together on the scan path', async () => {
+    stubFetch({
+      totalItems: 1,
+      items: [{ volumeInfo: { title: 'Fetched Title', authors: ['Ext Author'] } }],
+    });
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [BOOK_BY_ISBN, []],
+      [EXTERNAL_SETTINGS, [{ key: 'enable_google_books', value: 'true' }, { key: 'enable_open_library', value: 'true' }]],
+      [INSERT_BOOK, [{ ...cachedBook, id: 77 }]],
+      [MAP_DUP_CHECK, []],
+      [INSERT_MAPPING, [{ id: 9 }]],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post(`/api/books/scan/${VALID_ISBN13}`)
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100 });
+
+    expect(res.status).toBe(201);
+    expect(indexOf(/^BEGIN$/)).toBeLessThan(indexOf(INSERT_BOOK));
+    expect(indexOf(INSERT_BOOK)).toBeLessThan(indexOf(INSERT_MAPPING));
+    expect(indexOf(INSERT_MAPPING)).toBeLessThan(indexOf(/^COMMIT$/));
+  });
+
+  it('rolls the catalog insert back when the scan mapping insert fails', async () => {
+    stubFetch({
+      totalItems: 1,
+      items: [{ volumeInfo: { title: 'Fetched Title', authors: ['Ext Author'] } }],
+    });
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [BOOK_BY_ISBN, []],
+      [EXTERNAL_SETTINGS, [{ key: 'enable_google_books', value: 'true' }, { key: 'enable_open_library', value: 'true' }]],
+      [INSERT_BOOK, [{ ...cachedBook, id: 77 }]],
+      [MAP_DUP_CHECK, []],
+      [INSERT_MAPPING, () => { throw new Error('deadlock detected'); }],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post(`/api/books/scan/${VALID_ISBN13}`)
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100 });
+
+    expect(res.status).toBe(500);
+    // The books row was written, so it must be undone rather than left orphaned
+    expect(sqlText().some((s) => INSERT_BOOK.test(s))).toBe(true);
+    expect(sqlText()).toContain('ROLLBACK');
+    expect(sqlText()).not.toContain('COMMIT');
+  });
+
+  it('does not hold a transaction open across the external metadata lookup', async () => {
+    stubFetch({
+      totalItems: 1,
+      items: [{ volumeInfo: { title: 'Fetched Title', authors: ['Ext Author'] } }],
+    });
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [BOOK_BY_ISBN, []],
+      [EXTERNAL_SETTINGS, [{ key: 'enable_google_books', value: 'true' }, { key: 'enable_open_library', value: 'true' }]],
+      [INSERT_BOOK, [{ ...cachedBook, id: 77 }]],
+      [MAP_DUP_CHECK, []],
+      [INSERT_MAPPING, [{ id: 9 }]],
+    ], { authenticatedAs: 'owner' });
+
+    await request(app)
+      .post(`/api/books/scan/${VALID_ISBN13}`)
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100 });
+
+    // A pooled client held across a 12s provider call would exhaust the pool
+    expect(indexOf(EXTERNAL_SETTINGS)).toBeLessThan(indexOf(/^BEGIN$/));
+  });
+
+  it('rolls the catalog insert back when the manual mapping insert fails', async () => {
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [INSERT_BOOK, [{ id: 88, isbn: 'MANUAL-1', title: 'Handwritten Journal' }]],
+      [MAP_DUP_CHECK, []],
+      [INSERT_MAPPING, () => { throw new Error('deadlock detected'); }],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post('/api/books/manual')
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100, title: 'Handwritten Journal' });
+
+    expect(res.status).toBe(500);
+    expect(sqlText().some((s) => INSERT_BOOK.test(s))).toBe(true);
+    expect(sqlText()).toContain('ROLLBACK');
+    expect(sqlText()).not.toContain('COMMIT');
+  });
+
+  it('commits the catalog insert and the mapping together on the manual path', async () => {
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [INSERT_BOOK, [{ id: 88, isbn: 'MANUAL-1', title: 'Handwritten Journal' }]],
+      [MAP_DUP_CHECK, []],
+      [INSERT_MAPPING, [{ id: 11 }]],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post('/api/books/manual')
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100, title: 'Handwritten Journal' });
+
+    expect(res.status).toBe(201);
+    expect(indexOf(/^BEGIN$/)).toBeLessThan(indexOf(INSERT_BOOK));
+    expect(indexOf(INSERT_MAPPING)).toBeLessThan(indexOf(/^COMMIT$/));
+  });
+
+  it('rolls back the learned barcode alias when the manual mapping insert fails', async () => {
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [INSERT_BOOK, [{ id: 88, isbn: 'MANUAL-2', title: 'Mass Market Paperback' }]],
+      [/INSERT INTO book_barcodes/, []],
+      [MAP_DUP_CHECK, []],
+      [INSERT_MAPPING, () => { throw new Error('deadlock detected'); }],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post('/api/books/manual')
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100, title: 'Mass Market Paperback', scannedBarcode: '071831004956' });
+
+    expect(res.status).toBe(500);
+    // The alias points at a book id the rollback is about to erase
+    expect(sqlText().some((s) => /INSERT INTO book_barcodes/.test(s))).toBe(true);
+    expect(sqlText()).toContain('ROLLBACK');
+    expect(sqlText()).not.toContain('COMMIT');
+  });
+});
