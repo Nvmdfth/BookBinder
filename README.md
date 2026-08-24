@@ -4,48 +4,117 @@ BookBinder is an open-source, self-hosted, web-based home library management sys
 
 ---
 
-## 🛠️ Technology Stack
-* **Frontend:** React (Single Page Application, Mobile-First responsive layouts, custom dual-tone Theme Manager, and HTML5-qrcode scanning stream)
-* **Backend:** Express.js (REST API, Role-Based Access Control, JWT authentication with HttpOnly cookies)
-* **Database:** PostgreSQL (Relational schema, database-level deduplication, shared-shelf junctions)
-* **Deployment:** Docker & Docker Compose (Multi-container production configuration with data volume persistence)
+## ✨ What it does
+
+* **Catalog by barcode.** Scan an ISBN with your phone's camera and the book is looked up automatically via Google Books and OpenLibrary. Older paperbacks carrying a UPC rather than a Bookland EAN are learned on first scan: enter the book once, and every later scan of that barcode resolves locally.
+* **Scan without picking a shelf first.** The scan button lives in the app chrome. Each capture answers *do I already own this?* before asking where to file it, so you can stand in a bookshop and check.
+* **Shelves that map to real places.** Every copy records a physical location — which shelf, which box, which room — because the point is finding the book again.
+* **Wishlists**, marked per shelf, so wanted books live alongside owned ones without polluting the count.
+* **Sharing.** Shelves can be shared read-only or as a collaborator who can add and edit.
+* **Read tracking**, per copy rather than per title.
+* **Admin console** — account management, open-registration toggle, external lookup switches, catalog cache pruning, and database backup/restore.
+* **Themes** — light and dark, with selectable accent palettes, remembered per user.
 
 ---
 
-## 📂 Project Structure & Agent Orchestration
-This workspace has been pre-configured with active scaffolding to support clean developer workflows, both manual and automated through **Antigravity AI agent orchestration**:
+## 🛠️ Technology Stack
 
-```
-BookBinder/
-├── .agents/
-│   └── skills/
-│       └── bookbinder_developer/
-│           └── SKILL.md          <-- Developer skill & constraints for the AI agent
-├── skills/
-│   └── bookbinder_developer/
-│       └── SKILL.md              <-- Duplicate root skill mirror
-├── .gitignore                    <-- Standard git exclusions for Node, React, Docker, and DBs
-├── .antigravityignore             <-- High-speed ignore indexes to optimize AI context window
-├── BookBinder_PRD.md             <-- Core Product Requirements Document (PRD)
-└── README.md                     <-- General developer information
-```
-
-### Active Configuration Files
-* **`.gitignore`**: Excludes `node_modules/`, environments, logs, and internal database stores (`pg_data/`) from version control.
-* **`.antigravityignore`**: Ensures the **Antigravity** AI assistant ignores large binaries, locks, and logs to maximize context performance, token economy, and response speed.
-* **`.agents/skills/bookbinder_developer/SKILL.md`**: Outlines database schemas, interface parameters, and constraints to align AI contributions with BookBinder PRD specifications.
+* **Frontend:** React 18 SPA (Vite, React Router, mobile-first layouts, `html5-qrcode` camera scanning, lucide icons, per-user theme manager)
+* **Backend:** Express 4 REST API (JWT in HttpOnly cookies, role-based access control, bearer API tokens for automation)
+* **Database:** PostgreSQL 16 (relational schema, catalog-level deduplication, shared-shelf junctions; schema self-applies on boot)
+* **Deployment:** Docker Compose — one app container serving the API and the built SPA, one Postgres container, two named volumes
+* **Testing:** Jest + supertest (backend), Vitest + Testing Library (frontend), Playwright (end-to-end, real browser against the full stack), ESLint at zero warnings
 
 ---
 
 ## 🚀 Getting Started
 
-To initialize the development environment:
-1. **Frontend Setup**:
-   Create a standard React project in the `frontend` folder using `npx create-vite-app` or standard template wrappers.
-2. **Backend Setup**:
-   Build an Express.js backend wrapper in `backend/` with dependency mappings for `pg` (PostgreSQL driver), `jsonwebtoken`, `cookie-parser`, and standard middleware blocks.
-3. **Containerization Setup**:
-   Prepare a unified `docker-compose.yml` to stitch the React host engine, the Express backend API, and the PostgreSQL instance into an isolated internal Docker bridge network.
+You need Docker and Docker Compose. Nothing else — Node is only required if you want to run the app outside containers.
+
+```bash
+git clone https://git.wanmedia.net/Optx/BookBinder.git
+cd BookBinder
+cp .env.example .env
+```
+
+Edit `.env` before the first boot. Three values matter:
+
+| Variable | Why it matters |
+|---|---|
+| `JWT_SECRET` | Signs session cookies. Change it from the example value, and don't change it afterwards — every existing session dies when you do. |
+| `BOOKBINDER_ADMIN_EMAIL` / `_PASS` | Seeds the first administrator, and **only** on a genuinely empty database. See [Administrator Access](#-administrator-access). |
+| `GOOGLE_BOOKS_API_KEY` | Optional but recommended. Without it, wildcard searches hit Google's unauthenticated rate limit and start returning `429`. |
+
+Then:
+
+```bash
+docker compose up -d --build
+```
+
+The app is at **http://localhost:5000** (change with `PORT`). Sign in with the admin credentials you just set. Open registration is **off** by default — turn it on in the admin console if you want others to sign themselves up.
+
+---
+
+## 💻 Development
+
+Running outside Docker needs a Postgres reachable on `localhost:5432` — the compose file's `db` service is fine on its own:
+
+```bash
+docker compose up -d db
+
+cd backend && npm install && npm run dev     # API on :5000, nodemon
+cd frontend && npm install && npm run dev    # Vite on :5173, proxies /api to :5000
+```
+
+### Tests
+
+```bash
+cd backend  && npx jest         # unit + route tests, db and child_process mocked
+cd frontend && npx vitest run   # component tests, jsdom
+cd frontend && npm run lint     # eslint, --max-warnings 0
+cd e2e      && npm test         # Playwright against a real stack it builds itself
+```
+
+The e2e suite boots and tears down its own containers; see [e2e/README.md](e2e/README.md). `npm run tour` there screenshots every screen and audits contrast.
+
+---
+
+## 📂 Project Structure
+
+```
+BookBinder/
+├── backend/
+│   ├── src/
+│   │   ├── db/            init.sql — schema, replayed idempotently on every boot
+│   │   ├── middleware/    cookie auth, bearer API tokens, share access
+│   │   ├── routes/        auth, users, bookshelves, books, shares, settings, admin backup
+│   │   ├── services/      pg_dump / pg_restore wrapper
+│   │   └── utils/         ISBN normalisation, session cookie, token minting
+│   ├── scripts/           reset-admin.js
+│   └── tests/             Jest + supertest
+├── frontend/
+│   └── src/
+│       ├── components/    Modal, BarcodeScanner, ScanModal, BookVolume, BackupCard, Layout
+│       ├── context/       AuthProvider, ThemeProvider
+│       ├── pages/         Dashboard, BookshelfDetails, AdminConsole, ProfileSettings, auth
+│       └── tests/         Vitest + Testing Library
+├── e2e/                   Playwright suite and design tour
+├── docs/                  design specs and implementation plans
+├── scripts/watchdog.sh    optional auto-deploy poller (see Deployment)
+├── docker-compose.yml     app + db, two named volumes
+├── Dockerfile             two stages: build the SPA, then serve it from Express
+└── BookBinder_PRD.md      product requirements
+```
+
+---
+
+## 🚢 Deployment
+
+The published container serves both the API and the built SPA on a single port, so it sits behind a reverse proxy or tunnel without extra routing. Behind TLS termination, `trust proxy` honours `X-Forwarded-Proto` — the session cookie's `Secure` flag follows the browser's connection rather than the app's, which is what lets it work over both a LAN address and a public HTTPS host.
+
+`scripts/watchdog.sh` is an optional auto-updater for a self-hosted box: it polls the remote branch every 60s and rebuilds the stack only when a new commit lands. Set `PROJECT_DIR` and `BRANCH` inside it before use.
+
+---
 
 ## 🔑 Administrator Access
 
