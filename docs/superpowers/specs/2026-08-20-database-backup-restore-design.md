@@ -13,20 +13,21 @@ new server means a manual `pg_restore` against a half-booted stack.
 
 Two gaps follow from that:
 
-- **No automation.** n8n runs the household's scheduled jobs and has no endpoint to
-  call. Every backup is a remembered chore.
+- **No automation.** The household's scheduled jobs have no endpoint to call. Every
+  backup is a remembered chore.
 - **No recovery path inside the app.** The admin console can prune orphaned catalog
   rows but cannot export or reinstate the database it manages.
 
 ## What we're building
 
 An admin-only backup subsystem with two surfaces: a card in the admin console for a
-human, and HTTP endpoints for n8n. Export produces a real `pg_dump` archive. Import
+human, and HTTP endpoints for a scheduler. Export produces a real `pg_dump` archive. Import
 accepts one back and replaces the database with it, behind a confirmation the caller
 must supply deliberately.
 
-A third piece falls out of the second surface: n8n cannot use the cookie session the
-browser gets, so this introduces **API tokens** as the app's first machine credential.
+A third piece falls out of the second surface: an automated client cannot use the
+cookie session the browser gets, so this introduces **API tokens** as the app's first
+machine credential.
 
 ## Scope
 
@@ -34,7 +35,7 @@ browser gets, so this introduces **API tokens** as the app's first machine crede
 for all three, Dockerfile change to ship the Postgres client binaries.
 
 **Out:** avatar image files (see [Avatars are not included](#avatars-are-not-included)),
-scheduling inside BookBinder (n8n owns that), backup retention or rotation, partial or
+scheduling inside BookBinder (whatever runs the timer owns that), backup retention or rotation, partial or
 per-user exports, and API tokens as a general-purpose key for the rest of the API.
 
 ## Backup format
@@ -141,7 +142,7 @@ existing `requireAdmin` guard.
 
 A request missing the confirmation, or carrying any other value, is rejected `400`
 before `pg_restore` is invoked. The check exists so that no accidental or malformed
-POST — a misconfigured n8n node, a retried request — can destroy the database. It is
+POST — a misconfigured automation, a retried request — can destroy the database. It is
 not a security control; the token is. It is a control against automation firing the
 wrong way.
 
@@ -291,17 +292,12 @@ export from a live stack, confirm `pg_restore --list` reads the archive, restore
 back, and confirm the data survives. Automated round-trip coverage would require
 standing up Postgres in CI, which this repo does not do for any other subsystem.
 
-## n8n usage
+## Automation usage
 
-```
-Schedule (nightly)
-  → HTTP Request
-      GET https://<host>/api/admin/backup
-      Header: Authorization: Bearer bb_...
-      Response format: File
-  → write to storage
+```bash
+curl -fsS -H "Authorization: Bearer bb_..."   -o "bookbinder-$(date +%F).dump"   https://<host>/api/admin/backup
 ```
 
-A failed dump returns `500` with a JSON body, so the workflow can branch on status
+A failed dump returns `500` with a JSON body, so the caller can branch on status
 rather than inspecting the downloaded bytes. That is the property the buffering
 decision above was made to guarantee.

@@ -10,7 +10,7 @@ const router = express.Router();
 // incident-response control: revoke the leaked token, and the attacker who
 // used it to mint a fresh one still holds a credential the admin never
 // issued. Token management therefore requires a browser session; Bearer
-// tokens remain valid on backupRouter.js, the endpoint n8n actually calls.
+// tokens remain valid on backupRouter.js, the endpoint automation actually calls.
 router.use(authenticateToken);
 router.use(requireAdmin);
 

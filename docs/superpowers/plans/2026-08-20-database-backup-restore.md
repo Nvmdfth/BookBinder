@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give BookBinder admins a `pg_dump` export and `pg_restore` import, reachable both from the admin console and from HTTP endpoints n8n can call on a schedule.
+**Goal:** Give BookBinder admins a `pg_dump` export and `pg_restore` import, reachable both from the admin console and from HTTP endpoints a scheduler can call on a timer.
 
 **Architecture:** A `pgBackup` service wraps `child_process.spawn` around the Postgres client binaries, which are added to the app image. Two routers under `/api/admin` expose export, restore and API token management. A new Bearer-token middleware sits in front of the existing cookie auth on those routes only, so automation gets a credential that survives password changes.
 
@@ -122,7 +122,7 @@ Append to `backend/src/db/init.sql`:
 --
 -- The browser session is a cookie carrying a signature derived from the user's
 -- password hash, so it dies on every password change — correct for a browser,
--- useless for a scheduled n8n job. These are independent credentials: revoked
+-- useless for a scheduled backup job. These are independent credentials: revoked
 -- explicitly, never implicitly.
 --
 -- Only the SHA-256 hash is stored. The plaintext is shown once at creation and
@@ -232,7 +232,7 @@ Create `backend/src/utils/apiToken.js`:
 ```javascript
 const crypto = require('crypto');
 
-/** Marks a BookBinder credential on sight in an n8n config or a log line. */
+/** Marks a BookBinder credential on sight in a config file or a log line. */
 const TOKEN_PREFIX = 'bb_';
 
 /**
@@ -884,28 +884,28 @@ describe('Admin guard on /api/admin/tokens', () => {
 
 describe('POST /api/admin/tokens', () => {
   it('returns the plaintext token exactly once, at creation', async () => {
-    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'n8n nightly', created_at: '2026-08-20T00:00:00Z' }]]], {
+    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'nightly backup', created_at: '2026-08-20T00:00:00Z' }]]], {
       authenticatedAs: 'admin',
     });
 
     const res = await request(app)
       .post('/api/admin/tokens')
       .set('Cookie', authCookie('admin'))
-      .send({ name: 'n8n nightly' });
+      .send({ name: 'nightly backup' });
 
     expect(res.status).toBe(201);
     expect(res.body.token).toMatch(/^bb_[A-Za-z0-9_-]{43}$/);
   });
 
   it('stores the hash, not the token', async () => {
-    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'n8n nightly', created_at: '2026-08-20T00:00:00Z' }]]], {
+    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'nightly backup', created_at: '2026-08-20T00:00:00Z' }]]], {
       authenticatedAs: 'admin',
     });
 
     const res = await request(app)
       .post('/api/admin/tokens')
       .set('Cookie', authCookie('admin'))
-      .send({ name: 'n8n nightly' });
+      .send({ name: 'nightly backup' });
 
     const insert = sqlCalls().find((c) => INSERT_TOKEN.test(c.sql));
     expect(insert.params).not.toContain(res.body.token);
@@ -927,7 +927,7 @@ describe('POST /api/admin/tokens', () => {
 describe('GET /api/admin/tokens', () => {
   it('never returns token values or hashes', async () => {
     mockSql(
-      [[LIST_TOKENS, [{ id: 4, name: 'n8n nightly', last_used_at: null, created_at: '2026-08-20T00:00:00Z' }]]],
+      [[LIST_TOKENS, [{ id: 4, name: 'nightly backup', last_used_at: null, created_at: '2026-08-20T00:00:00Z' }]]],
       { authenticatedAs: 'admin' }
     );
 
@@ -1109,7 +1109,7 @@ Create `backend/tests/backup.test.js`:
  *
  * Two behaviours here are load-bearing and easy to regress:
  *   1. A failed dump must not arrive as a 200 with a Content-Disposition
- *      header, or n8n will file a truncated file as a good backup.
+ *      header, or a backup job will file a truncated file as a good backup.
  *   2. Restore must not reach pg_restore without the exact confirmation
  *      string, or a misfiring automation destroys the database.
  */
@@ -1422,7 +1422,7 @@ beforeEach(() => {
     if (url === '/api/admin/tokens' && options.method === 'POST') {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ id: 1, name: 'n8n nightly', token: 'bb_secretvalue' }),
+        json: () => Promise.resolve({ id: 1, name: 'nightly backup', token: 'bb_secretvalue' }),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -1473,7 +1473,7 @@ describe('Token minting', () => {
   it('shows a new token once and not in the list afterwards', async () => {
     render(<BackupCard />);
 
-    await userEvent.type(screen.getByLabelText(/token name/i), 'n8n nightly');
+    await userEvent.type(screen.getByLabelText(/token name/i), 'nightly backup');
     await userEvent.click(screen.getByRole('button', { name: /generate token/i }));
 
     expect(await screen.findByText('bb_secretvalue')).toBeInTheDocument();
@@ -1507,7 +1507,8 @@ const UPLOADS_BACKUP_CMD =
   '  tar czf /backup/bookbinder-uploads-$(date +%F).tar.gz -C /data .';
 
 /**
- * Database backup, restore, and the API tokens that let n8n do it on a schedule.
+ * Database backup, restore, and the API tokens that let an automated client do it
+ * on a schedule.
  *
  * Lives outside AdminConsole.jsx, which is already long enough that another
  * card's worth of state would make it harder to read than it already is.
@@ -1670,7 +1671,7 @@ export default function BackupCard() {
       <section style={styles.section}>
         <h3 style={styles.sectionTitle}>API tokens</h3>
         <p style={styles.help}>
-          For scheduled backups from n8n. A token grants full administrative access to
+          For scheduled backups from an automation tool. A token grants full administrative access to
           every user&apos;s data and can trigger a restore — treat it as a password.
         </p>
 
@@ -1680,7 +1681,7 @@ export default function BackupCard() {
           type="text"
           value={tokenName}
           onChange={(e) => setTokenName(e.target.value)}
-          placeholder="n8n nightly"
+          placeholder="nightly backup"
         />
         <button className="btn btn-secondary" onClick={handleMintToken} disabled={!tokenName.trim()}>
           <Key size={18} />
@@ -1885,7 +1886,7 @@ Expected: the table prints with `token_hash` and `revoked_at` columns.
 
 Open the admin console, generate a token named `verification`, and copy it.
 
-- [ ] **Step 4: Download a backup with that token, as n8n would**
+- [ ] **Step 4: Download a backup with that token, as a scheduled job would**
 
 Run: `curl -sS -D- -o /tmp/verify.dump -H "Authorization: Bearer <token>" http://localhost:5000/api/admin/backup`
 
@@ -1923,24 +1924,19 @@ Expected: `401 {"error":"Invalid or revoked API token."}`
 
 - [ ] **Step 9: Document it in the README**
 
-Add a `## Backups` section covering: where the volumes live (`/var/lib/docker/volumes/bookbinder-pg-data/_data`), the admin console controls, the `docker run ... tar czf` command for avatars, and the n8n recipe:
+Add a `## Backups` section covering: where the volumes live (`/var/lib/docker/volumes/bookbinder-pg-data/_data`), the admin console controls, the `docker run ... tar czf` command for avatars, and the automation recipe:
 
-```
-Schedule (nightly)
-  → HTTP Request
-      GET https://<host>/api/admin/backup
-      Header: Authorization: Bearer bb_...
-      Response format: File
-  → write to storage
+```bash
+curl -fsS -H "Authorization: Bearer bb_..."   -o "bookbinder-$(date +%F).dump"   https://<host>/api/admin/backup
 ```
 
-Note that a failed dump returns `500` with a JSON body, so the workflow can branch on status rather than inspecting the bytes.
+Note that a failed dump returns `500` with a JSON body, so the caller can branch on status rather than inspecting the bytes.
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add README.md
-git commit -m "docs: document database backup, restore and n8n automation"
+git commit -m "docs: document database backup, restore and backup automation"
 ```
 
 ---

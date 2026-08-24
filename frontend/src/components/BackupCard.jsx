@@ -9,7 +9,8 @@ const UPLOADS_BACKUP_CMD =
   '  tar czf /backup/bookbinder-uploads-$(date +%F).tar.gz -C /data .';
 
 /**
- * Database backup, restore, and the API tokens that let n8n do it on a schedule.
+ * Database backup, restore, and the API tokens that let an automated client do it
+ * on a schedule.
  *
  * Lives outside AdminConsole.jsx, which is already long enough that another
  * card's worth of state would make it harder to read than it already is.
@@ -215,7 +216,7 @@ export default function BackupCard() {
       <section style={styles.section}>
         <h3 style={styles.sectionTitle}>API tokens</h3>
         <p style={styles.help}>
-          For scheduled backups from n8n. A token grants full administrative access to
+          For scheduled backups from an automation tool. A token grants full administrative access to
           every user&apos;s data and can trigger a restore — treat it as a password.
         </p>
 
@@ -225,7 +226,7 @@ export default function BackupCard() {
           type="text"
           value={tokenName}
           onChange={(e) => setTokenName(e.target.value)}
-          placeholder="n8n nightly"
+          placeholder="nightly backup"
         />
         <button
           className="btn btn-secondary"

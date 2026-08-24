@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_user_books_book_id ON user_books(book_id);
 --
 -- The browser session is a cookie carrying a signature derived from the user's
 -- password hash, so it dies on every password change — correct for a browser,
--- useless for a scheduled n8n job. These are independent credentials: revoked
+-- useless for a scheduled backup job. These are independent credentials: revoked
 -- explicitly, never implicitly.
 --
 -- Only the SHA-256 hash is stored. The plaintext is shown once at creation and

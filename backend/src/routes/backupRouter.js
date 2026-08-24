@@ -22,7 +22,7 @@ const upload = multer({
  * since the right status and message depend on this route's own contract
  * (the field must be named "file").
  *
- * An n8n HTTP Request node that sends the binary under any other field name
+ * A client that sends the binary under any other field name
  * hits LIMIT_UNEXPECTED_FILE; "Unexpected field" paired with a 500 is a
  * miserable thing to debug against a webhook with no server console.
  */

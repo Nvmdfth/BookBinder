@@ -19,7 +19,7 @@ beforeEach(() => {
     if (url === '/api/admin/tokens' && options.method === 'POST') {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ id: 1, name: 'n8n nightly', token: 'bb_secretvalue' }),
+        json: () => Promise.resolve({ id: 1, name: 'nightly backup', token: 'bb_secretvalue' }),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -70,7 +70,7 @@ describe('Token minting', () => {
   it('shows a new token once and not in the list afterwards', async () => {
     render(<BackupCard />);
 
-    await userEvent.type(screen.getByLabelText(/token name/i), 'n8n nightly');
+    await userEvent.type(screen.getByLabelText(/token name/i), 'nightly backup');
     await userEvent.click(screen.getByRole('button', { name: /generate token/i }));
 
     expect(await screen.findByText('bb_secretvalue')).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe('Token revocation', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve([
-            { id: 1, name: 'n8n nightly', last_used_at: null, created_at: '2026-01-01' },
+            { id: 1, name: 'nightly backup', last_used_at: null, created_at: '2026-01-01' },
           ]),
         });
       }
@@ -101,7 +101,7 @@ describe('Token revocation', () => {
 
     render(<BackupCard />);
 
-    const revokeButton = await screen.findByRole('button', { name: /revoke n8n nightly/i });
+    const revokeButton = await screen.findByRole('button', { name: /revoke nightly backup/i });
     await userEvent.click(revokeButton);
 
     // The first click's DELETE is still pending: the button must already be
@@ -121,7 +121,7 @@ describe('Token revocation', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve([
-            { id: 1, name: 'n8n nightly', last_used_at: null, created_at: '2026-01-01' },
+            { id: 1, name: 'nightly backup', last_used_at: null, created_at: '2026-01-01' },
           ]),
         });
       }
@@ -133,11 +133,11 @@ describe('Token revocation', () => {
 
     render(<BackupCard />);
 
-    const revokeButton = await screen.findByRole('button', { name: /revoke n8n nightly/i });
+    const revokeButton = await screen.findByRole('button', { name: /revoke nightly backup/i });
     await userEvent.click(revokeButton);
 
     expect(await screen.findByText(/could not revoke/i)).toBeInTheDocument();
-    expect(screen.getByText('n8n nightly')).toBeInTheDocument();
+    expect(screen.getByText('nightly backup')).toBeInTheDocument();
   });
 });
 
@@ -180,7 +180,7 @@ describe('Copy token feedback (M10)', () => {
     });
 
     render(<BackupCard />);
-    await userEvent.type(screen.getByLabelText(/token name/i), 'n8n nightly');
+    await userEvent.type(screen.getByLabelText(/token name/i), 'nightly backup');
     await userEvent.click(screen.getByRole('button', { name: /generate token/i }));
     await screen.findByText('bb_secretvalue');
 
@@ -193,7 +193,7 @@ describe('Copy token feedback (M10)', () => {
     Object.assign(navigator, { clipboard: undefined });
 
     render(<BackupCard />);
-    await userEvent.type(screen.getByLabelText(/token name/i), 'n8n nightly');
+    await userEvent.type(screen.getByLabelText(/token name/i), 'nightly backup');
     await userEvent.click(screen.getByRole('button', { name: /generate token/i }));
     await screen.findByText('bb_secretvalue');
 

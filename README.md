@@ -94,26 +94,23 @@ docker run --rm -v bookbinder-uploads-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/bookbinder-uploads-$(date +%F).tar.gz -C /data .
 ```
 
-### Automating nightly backups with n8n
+### Automating nightly backups
 
-Mint a token from the admin console, then wire up a simple workflow:
+Mint a token from the admin console, then have any scheduler or automation tool fetch the endpoint on a timer. All it needs is an HTTP GET with a bearer header, saving the response body to a file:
 
-```
-Schedule (nightly)
-  → HTTP Request
-      GET https://<host>/api/admin/backup
-      Header: Authorization: Bearer bb_...
-      Response format: File
-  → write to storage
+```bash
+curl -fsS -H "Authorization: Bearer bb_..." \
+  -o "bookbinder-$(date +%F).dump" \
+  https://<host>/api/admin/backup
 ```
 
-A failed dump returns `500` with a JSON error body rather than a truncated file, so branch the workflow on the HTTP status code — there's no need to inspect the downloaded bytes to know whether the backup succeeded.
+A failed dump returns `500` with a JSON error body rather than a truncated file, so branch on the HTTP status code — there's no need to inspect the downloaded bytes to know whether the backup succeeded. (`curl -f` above turns that into a non-zero exit status for a cron job to catch.)
 
 ### Restoring is destructive
 
 Restoring replaces every row in the database. Alongside the file, the restore endpoint requires a `confirm=REPLACE_ALL_DATA` field — without it, nothing happens. And because restoring rewrites the `users` table too, restoring an archive whose users differ from your current ones will sign you out; signing in again afterward is expected, not a bug.
 
-**Restoring also rewrites `api_tokens`,** since that table is part of the dump like any other. Any token minted after the archive was taken — including, potentially, the very credential the automation used to call the restore endpoint — reverts to whatever tokens existed at backup time and stops working. If a scheduled n8n job starts failing with `401` right after a restore, mint a fresh token from the console; this is expected, not a sign the restore went wrong.
+**Restoring also rewrites `api_tokens`,** since that table is part of the dump like any other. Any token minted after the archive was taken — including, potentially, the very credential the automation used to call the restore endpoint — reverts to whatever tokens existed at backup time and stops working. If a scheduled backup job starts failing with `401` right after a restore, mint a fresh token from the console; this is expected, not a sign the restore went wrong.
 
 **A caveat on older backups:** restoring an archive taken before a schema change can fail. The restore drops the tables present in the archive before reloading them, and if a newer table (added since that backup) holds a foreign key into one of those tables, the drop is blocked and the restore aborts. This fails safe — the whole restore runs as one transaction, so a blocked drop rolls everything back and your current data is left untouched — but it does mean an old backup won't restore in place. The fix is to restore it into a fresh database instead.
 

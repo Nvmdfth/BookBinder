@@ -3,7 +3,7 @@
  *
  * Two behaviours here are load-bearing and easy to regress:
  *   1. A failed dump must not arrive as a 200 with a Content-Disposition
- *      header, or n8n will file a truncated file as a good backup.
+ *      header, or a backup job will file a truncated file as a good backup.
  *   2. Restore must not reach pg_restore without the exact confirmation
  *      string, or a misfiring automation destroys the database.
  */
@@ -109,7 +109,7 @@ describe('GET /api/admin/backup', () => {
     expect(res.body.error).toMatch(/connection refused/);
   });
 
-  describe('Bearer-token path (n8n automation)', () => {
+  describe('Bearer-token path (automated clients)', () => {
     const TOKEN = 'bb_validtoken';
 
     it('succeeds with a valid Bearer token for an admin-owned token row', async () => {

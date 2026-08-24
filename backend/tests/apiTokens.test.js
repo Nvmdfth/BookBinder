@@ -51,28 +51,28 @@ describe('Admin guard on /api/admin/tokens', () => {
 
 describe('POST /api/admin/tokens', () => {
   it('returns the plaintext token exactly once, at creation', async () => {
-    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'n8n nightly', created_at: '2026-08-20T00:00:00Z' }]]], {
+    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'nightly backup', created_at: '2026-08-20T00:00:00Z' }]]], {
       authenticatedAs: 'admin',
     });
 
     const res = await request(app)
       .post('/api/admin/tokens')
       .set('Cookie', authCookie('admin'))
-      .send({ name: 'n8n nightly' });
+      .send({ name: 'nightly backup' });
 
     expect(res.status).toBe(201);
     expect(res.body.token).toMatch(/^bb_[A-Za-z0-9_-]{43}$/);
   });
 
   it('stores the hash, not the token', async () => {
-    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'n8n nightly', created_at: '2026-08-20T00:00:00Z' }]]], {
+    mockSql([[INSERT_TOKEN, [{ id: 4, name: 'nightly backup', created_at: '2026-08-20T00:00:00Z' }]]], {
       authenticatedAs: 'admin',
     });
 
     const res = await request(app)
       .post('/api/admin/tokens')
       .set('Cookie', authCookie('admin'))
-      .send({ name: 'n8n nightly' });
+      .send({ name: 'nightly backup' });
 
     const insert = sqlCalls().find((c) => INSERT_TOKEN.test(c.sql));
     expect(insert.params).not.toContain(res.body.token);
@@ -94,7 +94,7 @@ describe('POST /api/admin/tokens', () => {
 describe('GET /api/admin/tokens', () => {
   it('never returns token values or hashes', async () => {
     mockSql(
-      [[LIST_TOKENS, [{ id: 4, name: 'n8n nightly', last_used_at: null, created_at: '2026-08-20T00:00:00Z' }]]],
+      [[LIST_TOKENS, [{ id: 4, name: 'nightly backup', last_used_at: null, created_at: '2026-08-20T00:00:00Z' }]]],
       { authenticatedAs: 'admin' }
     );
 

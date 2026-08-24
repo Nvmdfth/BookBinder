@@ -4,7 +4,7 @@
  * multer's own errors carry no `.status`, so the app's global handler would
  * report both of these as a bare 500. backupRouter.js handles them directly:
  * over the size cap is 413, and a file sent under the wrong field name is 400
- * naming the expected field — the case an n8n HTTP Request node hits if its
+ * naming the expected field — the case an automated client hits if its
  * binary property isn't named "file".
  *
  * MAX_ARCHIVE_BYTES is mocked small here so the size-cap case doesn't have to

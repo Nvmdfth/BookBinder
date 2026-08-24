@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-/** Marks a BookBinder credential on sight in an n8n config or a log line. */
+/** Marks a BookBinder credential on sight in a config file or a log line. */
 const TOKEN_PREFIX = 'bb_';
 
 /**
