@@ -20,6 +20,7 @@
  */
 async function withTransaction(pool, fn) {
   const client = await pool.connect();
+  let discard;
 
   try {
     await client.query('BEGIN');
@@ -27,16 +28,18 @@ async function withTransaction(pool, fn) {
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    // A failed rollback must not mask what actually went wrong: the connection
-    // is already broken in that case, and releasing it discards it either way.
+    // A failed rollback must not mask what actually went wrong. The connection
+    // is broken in that case, so release(err) tells the pool to destroy it
+    // rather than hand it to the next caller.
     try {
       await client.query('ROLLBACK');
     } catch (rollbackError) {
+      discard = rollbackError;
       console.error('Rollback failed after transaction error:', rollbackError.message);
     }
     throw error;
   } finally {
-    client.release();
+    client.release(discard);
   }
 }
 
