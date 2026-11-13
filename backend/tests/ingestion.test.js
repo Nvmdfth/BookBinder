@@ -432,4 +432,42 @@ describe('Catalog and mapping are written atomically', () => {
     expect(sqlText()).toContain('ROLLBACK');
     expect(sqlText()).not.toContain('COMMIT');
   });
+
+  it('rolls back the manual-path enrichment when the book is already on the shelf', async () => {
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [BOOK_BY_ISBN, [cachedBook]],
+      [/UPDATE books SET title = COALESCE/, []],
+      [MAP_DUP_CHECK, [{ id: 5 }]],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post('/api/books/manual')
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100, isbn: VALID_ISBN13, title: 'Edited Title' });
+
+    expect(res.status).toBe(409);
+    // The UPDATE ran, so it must be rolled back rather than committed
+    expect(sqlText().some((s) => /UPDATE books/.test(s))).toBe(true);
+    expect(sqlText()).toContain('ROLLBACK');
+    expect(sqlText()).not.toContain('COMMIT');
+    expect(sqlText().some((s) => INSERT_MAPPING.test(s))).toBe(false);
+  });
+
+  it('rolls back on a scan-path 409 and writes no mapping', async () => {
+    mockSql([
+      [SHELF_LOOKUP, shelfOwnedByOwner],
+      [BOOK_BY_ISBN, [cachedBook]],
+      [MAP_DUP_CHECK, [{ id: 5 }]],
+    ], { authenticatedAs: 'owner' });
+
+    const res = await request(app)
+      .post(`/api/books/scan/${VALID_ISBN13}`)
+      .set('Cookie', authCookie('owner'))
+      .send({ bookshelfId: 100 });
+
+    expect(res.status).toBe(409);
+    expect(sqlText()).toContain('ROLLBACK');
+    expect(sqlText()).not.toContain('COMMIT');
+  });
 });

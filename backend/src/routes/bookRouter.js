@@ -1,5 +1,19 @@
 const express = require('express');
 const { query, withTransaction } = require('../db/db');
+
+// Thrown inside a withTransaction callback to roll back its writes while still
+// answering with a 409. Returning normally would COMMIT them.
+class DuplicateMappingError extends Error {
+  constructor(body) {
+    super('duplicate shelf mapping');
+    this.body = body;
+  }
+}
+
+// Serialises concurrent adds of one book to one shelf; user_books has no
+// unique (bookshelf_id, book_id) constraint to catch the race.
+const lockShelfMapping = (tx, bookshelfId, bookId) =>
+  tx('SELECT pg_advisory_xact_lock($1, $2)', [bookshelfId, bookId]);
 const { normalizeCoverUrl } = require('../utils/coverUrl');
 const { authenticateToken } = require('../middleware/authMiddleware');
 const { verifyBookshelfAccess, requireCollaborator } = require('../middleware/shareMiddleware');
@@ -427,6 +441,7 @@ router.post('/scan/:isbn', async (req, res, next) => {
             const insertRes = await tx(
               `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
                VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (isbn) DO UPDATE SET isbn = books.isbn
                RETURNING *`,
               [
                 externalData.isbn,
@@ -442,19 +457,17 @@ router.post('/scan/:isbn', async (req, res, next) => {
           }
 
           // Prevent identical double map inside same shelf
+          await lockShelfMapping(tx, activeBookshelfId, catalogBook.id);
           const mapCheck = await tx(
             'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
             [activeBookshelfId, catalogBook.id]
           );
 
           if (mapCheck.rows.length > 0) {
-            return {
-              status: 409,
-              body: {
+            throw new DuplicateMappingError({
                 error: `"${catalogBook.title}" is already mapped inside this bookshelf.`,
                 book: catalogBook,
-              },
-            };
+              });
           }
 
           // Map Book to User's Bookshelf
@@ -486,6 +499,7 @@ router.post('/scan/:isbn', async (req, res, next) => {
         return res.status(outcome.status).json(outcome.body);
 
       } catch (error) {
+        if (error instanceof DuplicateMappingError) return res.status(409).json(error.body);
         console.error('Scan Book Router Error:', error);
         return res.status(500).json({ error: 'Internal server error cataloging barcode scan.' });
       }
@@ -570,6 +584,7 @@ router.post('/manual', async (req, res) => {
             const insertRes = await tx(
               `INSERT INTO books (isbn, title, author, publisher, cover_image_url, page_count, publication_date)
                VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (isbn) DO UPDATE SET isbn = books.isbn
                RETURNING *`,
               [
                 finalIsbn,
@@ -590,19 +605,17 @@ router.post('/manual', async (req, res) => {
           await learnBarcodeAlias(scannedBarcode, book.id, tx);
 
           // 4. Prevent duplicate bookshelf mapping
+          await lockShelfMapping(tx, activeBookshelfId, book.id);
           const mapCheck = await tx(
             'SELECT id FROM user_books WHERE bookshelf_id = $1 AND book_id = $2',
             [activeBookshelfId, book.id]
           );
 
           if (mapCheck.rows.length > 0) {
-            return {
-              status: 409,
-              body: {
+            throw new DuplicateMappingError({
                 error: `"${book.title}" is already mapped inside this bookshelf.`,
                 book: book,
-              },
-            };
+              });
           }
 
           // 5. Create user_books shelf mapping association
@@ -634,6 +647,7 @@ router.post('/manual', async (req, res) => {
         return res.status(outcome.status).json(outcome.body);
 
       } catch (error) {
+        if (error instanceof DuplicateMappingError) return res.status(409).json(error.body);
         console.error('Manual Book Router Error:', error);
         return res.status(500).json({ error: 'Internal server error registering book manually.' });
       }

@@ -100,6 +100,7 @@ function mockSql(handlers, { authenticatedAs = 'owner', authOverrides = {} } = {
      * out of sqlCalls() rather than handling them, so they default to succeeding.
      */
     [/^(BEGIN|COMMIT|ROLLBACK)$/, []],
+    [/pg_advisory_xact_lock/, []],
   ];
 
   query.mockImplementation(async (text, params) => {

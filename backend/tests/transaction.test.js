@@ -104,4 +104,29 @@ describe('withTransaction', () => {
       withTransaction(pool, async () => { throw new Error('original cause'); })
     ).rejects.toThrow('original cause');
   });
+
+  it('releases the client with the rollback error so the pool discards it', async () => {
+    const { pool, client } = fakePool();
+    const broken = new Error('connection terminated');
+    client.query.mockImplementation(async (text) => {
+      if (text === 'ROLLBACK') throw broken;
+      return { rows: [], rowCount: 0 };
+    });
+
+    await expect(
+      withTransaction(pool, async () => { throw new Error('boom'); })
+    ).rejects.toThrow('boom');
+
+    expect(client.release).toHaveBeenCalledWith(broken);
+  });
+
+  it('releases the client cleanly when the rollback succeeds', async () => {
+    const { pool, client } = fakePool();
+
+    await expect(
+      withTransaction(pool, async () => { throw new Error('boom'); })
+    ).rejects.toThrow('boom');
+
+    expect(client.release).toHaveBeenCalledWith(undefined);
+  });
 });
