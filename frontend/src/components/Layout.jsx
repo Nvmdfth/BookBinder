@@ -77,7 +77,7 @@ export default function Layout({ children }) {
     <div className={`app-shell${collapsed ? ' app-shell-rail' : ''}`}>
       {/* Desktop sidebar */}
       <aside className="app-sidebar">
-        <div className="nav-brand">
+        <Link to="/" className="nav-brand" style={styles.brandLink} aria-label="BookBinder home">
           <BookMarked size={26} style={{ color: 'var(--accent-color)', flexShrink: 0 }} />
           {!collapsed && (
             <div style={styles.brandText}>
@@ -85,7 +85,7 @@ export default function Layout({ children }) {
               <span className="typed" style={styles.brandSub}>Home Catalog</span>
             </div>
           )}
-        </div>
+        </Link>
 
         <hr className="rule-double" style={{ margin: '16px 4px 14px' }} />
 
@@ -156,10 +156,10 @@ export default function Layout({ children }) {
 
       {/* Mobile header */}
       <header className="app-mobile-header">
-        <div style={styles.brand}>
+        <Link to="/" style={{ ...styles.brand, ...styles.brandLink }} aria-label="BookBinder home">
           <BookMarked size={23} style={{ color: 'var(--accent-color)' }} />
           <span style={{ ...styles.brandName, fontSize: '1.06rem' }}>BookBinder</span>
-        </div>
+        </Link>
         <div style={styles.mobileActions}>
           <button
             className="btn btn-ghost"
@@ -237,6 +237,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
+  },
+  brandLink: {
+    textDecoration: 'none',
+    color: 'inherit',
   },
   brandText: {
     display: 'flex',
